@@ -53,7 +53,6 @@
   const balloonsEl = document.getElementById("balloons");
   const skyEl = document.getElementById("sky");
   const typedEl = document.getElementById("typed");
-  const inputEl = document.getElementById("input");
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlay-title");
   const overlayMsg = document.getElementById("overlay-msg");
@@ -491,12 +490,15 @@
     overlay.classList.add("hidden");
   }
 
-  function focusInput() {
-    // Keep a real focused input so keyboards (esp. iPad / soft keyboard) work
+  /**
+   * Focus the game stage (a div, not an input) so Bluetooth keyboards
+   * send keys to the page without opening the iPad soft keyboard.
+   */
+  function focusStage() {
     try {
-      inputEl.focus({ preventScroll: true });
+      stage.focus({ preventScroll: true });
     } catch (_) {
-      inputEl.focus();
+      stage.focus();
     }
   }
 
@@ -518,7 +520,8 @@
     state = "playing";
     playStart();
     if (musicOn) startMusic();
-    focusInput();
+    // No <input>: Bluetooth / hardware keyboard via window keydown only
+    focusStage();
     // Easy starts with 1 balloon so players can settle in
     spawnBalloon();
     if (difficulty !== "easy") {
@@ -669,19 +672,17 @@
     startGame();
   });
 
-  // Click stage to refocus input during play
+  // Tap stage while playing: re-focus stage (still no soft keyboard)
   stage.addEventListener("pointerdown", (e) => {
-    if (state === "playing") {
-      // don't steal clicks from overlay (hidden) or buttons
-      if (e.target.closest("#overlay") && !overlay.classList.contains("hidden")) return;
-      focusInput();
-    }
+    if (state !== "playing") return;
+    if (e.target.closest("#overlay") && !overlay.classList.contains("hidden")) return;
+    focusStage();
   });
 
+  // Hardware / Bluetooth keyboard only — no text field needed on iPad
   window.addEventListener(
     "keydown",
     (e) => {
-      // Always handle meta keys first
       if (e.key === "Escape") {
         e.preventDefault();
         if (state === "playing") pauseToMenu();
@@ -689,7 +690,8 @@
       }
 
       if (e.key === "Enter" && (state === "menu" || state === "over")) {
-        // Don't steal Enter from buttons if focused — still start is fine
+        // Avoid double-firing when Start button is focused
+        if (document.activeElement === startBtn) return;
         e.preventDefault();
         startGame();
         return;
@@ -698,7 +700,7 @@
       if (state !== "playing") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      // Prefer e.key, fall back to e.code (works even with some IME quirks)
+      // Prefer e.key; fall back to e.code (layout-stable on BT keyboards)
       let ch = normalizeKey(e.key);
       if (!ch) ch = normalizeFromCode(e.code);
       if (!ch) return;
@@ -706,28 +708,8 @@
       e.preventDefault();
       onLetter(ch);
     },
-    true // capture: beat anything that might stop propagation
+    true
   );
-
-  // Soft keyboard / mobile: input event
-  inputEl.addEventListener("input", () => {
-    const v = inputEl.value;
-    if (!v) return;
-    // take last char typed
-    const raw = v[v.length - 1];
-    inputEl.value = "";
-    const ch = normalizeKey(raw);
-    if (ch) onLetter(ch);
-  });
-
-  // Re-focus if blur while playing (user clicked outside)
-  inputEl.addEventListener("blur", () => {
-    if (state === "playing") {
-      setTimeout(() => {
-        if (state === "playing") focusInput();
-      }, 10);
-    }
-  });
 
   // init
   bestEl.textContent = String(best);

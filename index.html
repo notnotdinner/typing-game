@@ -39,32 +39,19 @@
       </div>
     </div>
 
-    <div class="stage" id="stage">
+    <div class="stage" id="stage" tabindex="0" role="application" aria-label="气球打字游戏区">
       <div id="sky" class="sky" aria-hidden="true"></div>
       <div id="balloons" class="balloons" aria-live="polite"></div>
-      <div class="typed-bar" id="typed-bar">
+      <div class="typed-bar" id="typed-bar" aria-hidden="true">
         <span class="typed-label">刚按</span>
         <span id="typed" class="typed-text"></span>
-        <span class="caret"></span>
       </div>
-      <input
-        id="input"
-        class="hidden-input"
-        type="text"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-        spellcheck="false"
-        inputmode="text"
-        enterkeyhint="done"
-        aria-label="打字输入"
-      />
 
       <!-- Start / settings overlay -->
       <div id="overlay" class="overlay">
         <div class="overlay-card">
           <h2 id="overlay-title">🎈 气球打字</h2>
-          <p id="overlay-msg">每个气球上有一个字母。按下对应键即可炸掉它。别让气球飞出顶部！</p>
+          <p id="overlay-msg">接上蓝牙键盘即可玩，无需屏幕输入框。每个气球一个字母，按下对应键炸掉它。</p>
 
           <div id="settings" class="settings">
             <div class="setting-group">
@@ -92,7 +79,7 @@
     </div>
 
     <p class="hint">
-      一气球一字母，按对应键炸掉 · <kbd>Esc</kbd> 暂停/菜单 · 支持外接键盘
+      专为 <strong>蓝牙 / 外接键盘</strong> 设计，无需输入框 · 一气球一字母 · <kbd>Esc</kbd> 暂停
     </p>
 
     <footer class="footer">

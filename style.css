@@ -146,7 +146,12 @@ body {
     #c5e9fa 70%,
     #e3f4fc 100%
   );
-  cursor: text;
+  cursor: default;
+  outline: none;
+}
+
+.stage:focus {
+  border-color: rgba(91, 157, 255, 0.55);
 }
 
 .sky {
@@ -370,31 +375,6 @@ body {
   66% {
     transform: translateX(4px);
   }
-}
-
-.caret {
-  width: 2px;
-  height: 1.15em;
-  background: var(--accent);
-  border-radius: 1px;
-  animation: blink 1s steps(1) infinite;
-  flex-shrink: 0;
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-.hidden-input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-  width: 1px;
-  height: 1px;
-  left: 0;
-  top: 0;
 }
 
 /* Overlay */
