@@ -82,11 +82,19 @@
   let lives = 3;
   let popped = 0;
   let lastKey = "";
-  let balloons = []; // { id, letter, x, y, speed, color, el }
+  let balloons = []; // { id, letter, x, y, speed, color, el, egg? }
   let nextId = 1;
   let spawnAcc = 0;
   let lastTs = 0;
   let rafId = null;
+
+  // Easter egg: 10 identical letters, clear all for fanfare
+  let egg = null; // { letter, remaining, total, startedAt }
+  let eggCooldown = 0; // ms until next egg can trigger
+  let eggPlayTime = 0; // ms played this run
+  const EGG_COUNT = 10;
+  const EGG_COOLDOWN_MS = 28000;
+  const EGG_MIN_PLAY_MS = 12000; // don't fire in the first few seconds
 
   // --- Audio ---
   let audioCtx = null;
@@ -143,6 +151,39 @@
     tone(392, 0.1, "sine", 0.08);
     tone(523, 0.1, "sine", 0.08, 0.1);
     tone(659, 0.18, "sine", 0.09, 0.2);
+  }
+
+  function playEggAppear() {
+    // Magical chime when egg wave starts
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => tone(f, 0.14, "triangle", 0.09, i * 0.07));
+    tone(1318.5, 0.22, "sine", 0.06, 0.28);
+  }
+
+  function playEggClear() {
+    // Big fanfare arpeggio + sparkle
+    const ctx = ensureAudio();
+    if (!ctx || !sfxOn) return;
+    const fanfare = [
+      [523.25, 0],
+      [659.25, 0.08],
+      [783.99, 0.16],
+      [1046.5, 0.24],
+      [1318.5, 0.34],
+      [1568.0, 0.44],
+      [2093.0, 0.56],
+    ];
+    fanfare.forEach(([f, t]) => {
+      tone(f, 0.28, "triangle", 0.11, t);
+      tone(f * 2, 0.18, "sine", 0.04, t + 0.02);
+    });
+    // shimmer cascade
+    for (let i = 0; i < 10; i++) {
+      tone(1200 + i * 90, 0.06, "sine", 0.035, 0.7 + i * 0.04);
+    }
+    // deep boom
+    tone(98, 0.45, "sine", 0.08, 0.5);
+    tone(196, 0.35, "triangle", 0.07, 0.52);
   }
 
   function stopMusic() {
@@ -339,25 +380,9 @@
   }
 
   // --- Balloons: one letter each ---
-  function spawnBalloon() {
-    const cfg = DIFFICULTY[difficulty];
-    if (balloons.length >= cfg.maxBalloons) return;
-
-    const used = balloons.map((b) => b.letter);
-    const letter = window.pickLetter(difficulty, includeNumbers, used);
-
-    let x = 8 + Math.random() * 84;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const clash = balloons.some((b) => Math.abs(b.x - x) < 9 && b.y < 30);
-      if (!clash) break;
-      x = 8 + Math.random() * 84;
-    }
-
-    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const speed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
-
+  function createBalloonEl(letter, x, color, isEgg) {
     const el = document.createElement("div");
-    el.className = "balloon";
+    el.className = "balloon" + (isEgg ? " egg" : "");
     el.style.left = `${x}%`;
     el.style.bottom = `-90px`;
     el.dataset.letter = letter;
@@ -369,15 +394,64 @@
       <div class="string"></div>
     `;
     balloonsEl.appendChild(el);
+    return el;
+  }
+
+  function spawnBalloon(opts = {}) {
+    const cfg = DIFFICULTY[difficulty];
+    const isEgg = !!opts.egg;
+    if (!isEgg && balloons.length >= cfg.maxBalloons) return;
+    if (!isEgg && egg) return; // pause normal spawn during egg wave
+
+    const used = balloons.map((b) => b.letter);
+    const letter =
+      opts.letter ||
+      window.pickLetter(difficulty, includeNumbers, used);
+
+    let x =
+      opts.x != null
+        ? opts.x
+        : 8 + Math.random() * 84;
+    if (opts.x == null) {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const clash = balloons.some((b) => Math.abs(b.x - x) < 9 && b.y < 30);
+        if (!clash) break;
+        x = 8 + Math.random() * 84;
+      }
+    }
+
+    const color =
+      opts.color ||
+      (isEgg
+        ? { body: "linear-gradient(145deg,#ffd700,#ff6b9d,#7c5cff)", knot: "#e0a000" }
+        : COLORS[Math.floor(Math.random() * COLORS.length)]);
+
+    // Egg balloons use solid gold-ish palette for CSS gradient workaround
+    const bodyColor = isEgg
+      ? ["#ffd54f", "#ff8a65", "#ce93d8", "#80deea", "#a5d6a7", "#f48fb1", "#90caf9", "#fff59d", "#ffab91", "#b39ddb"][
+          balloons.filter((b) => b.egg).length % 10
+        ]
+      : color.body;
+
+    const speedBase =
+      opts.speed != null
+        ? opts.speed
+        : cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
+    // Egg balloons rise a bit slower so you can clear 10
+    const speed = isEgg ? speedBase * 0.72 : speedBase;
+    const y = opts.y != null ? opts.y : -10 - (opts.stagger || 0);
+
+    const el = createBalloonEl(letter, x, { body: bodyColor, knot: color.knot || "#e0a000" }, isEgg);
 
     balloons.push({
       id: nextId++,
-      letter, // always lowercase a-z or digit
+      letter,
       x,
-      y: -10,
+      y,
       speed,
-      color,
+      color: { body: bodyColor, knot: color.knot || "#ccc" },
       el,
+      egg: isEgg,
     });
   }
 
@@ -400,12 +474,144 @@
     setTimeout(() => el.remove(), 700);
   }
 
+  function showToast(text, className = "") {
+    const el = document.createElement("div");
+    el.className = "game-toast" + (className ? ` ${className}` : "");
+    el.textContent = text;
+    stage.appendChild(el);
+    // reflow for animation
+    requestAnimationFrame(() => el.classList.add("show"));
+    setTimeout(() => {
+      el.classList.remove("show");
+      el.classList.add("hide");
+      setTimeout(() => el.remove(), 400);
+    }, className.includes("egg-clear") ? 2200 : 1600);
+  }
+
+  function spawnConfetti() {
+    const layer = document.createElement("div");
+    layer.className = "confetti-layer";
+    stage.appendChild(layer);
+    const colors = ["#ff6b9d", "#ffd166", "#5b9dff", "#3ddc97", "#c77dff", "#ff8e53", "#fff", "#48dbfb"];
+    for (let i = 0; i < 48; i++) {
+      const p = document.createElement("span");
+      p.className = "confetti-piece";
+      p.style.left = `${Math.random() * 100}%`;
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = `${Math.random() * 0.35}s`;
+      p.style.animationDuration = `${1.1 + Math.random() * 0.9}s`;
+      p.style.setProperty("--rot", `${Math.random() * 720 - 360}deg`);
+      p.style.setProperty("--dx", `${Math.random() * 80 - 40}px`);
+      layer.appendChild(p);
+    }
+    setTimeout(() => layer.remove(), 2200);
+  }
+
+  function triggerEggClearFx(letter) {
+    stage.classList.add("egg-celebrate");
+    showToast(`✨ 彩蛋清场！ ${letter.toUpperCase()} × ${EGG_COUNT}`, "egg-clear");
+    spawnConfetti();
+
+    // Radial flash
+    const flash = document.createElement("div");
+    flash.className = "egg-flash";
+    stage.appendChild(flash);
+    setTimeout(() => flash.remove(), 900);
+
+    // Giant letter burst
+    const burst = document.createElement("div");
+    burst.className = "egg-letter-burst";
+    burst.textContent = letter.toUpperCase();
+    stage.appendChild(burst);
+    setTimeout(() => burst.remove(), 1200);
+
+    playEggClear();
+
+    setTimeout(() => stage.classList.remove("egg-celebrate"), 2000);
+  }
+
+  function startEggWave() {
+    if (state !== "playing" || egg) return;
+
+    // Clear field a bit: keep existing non-egg balloons rising, but stop new normal ones
+    const letter = window.pickLetter(difficulty, includeNumbers, []);
+    egg = {
+      letter,
+      remaining: EGG_COUNT,
+      total: EGG_COUNT,
+      startedAt: performance.now(),
+    };
+    eggCooldown = EGG_COOLDOWN_MS;
+
+    playEggAppear();
+    showToast(`🎈 彩蛋！狂按  ${letter.toUpperCase()}  × ${EGG_COUNT}`, "egg-start");
+    stage.classList.add("egg-active");
+
+    // Fan 10 balloons across the width, staggered depth
+    for (let i = 0; i < EGG_COUNT; i++) {
+      const x = 6 + (i / (EGG_COUNT - 1)) * 88 + (Math.random() * 4 - 2);
+      const stagger = (i % 5) * 4 + Math.random() * 3;
+      spawnBalloon({
+        letter,
+        egg: true,
+        x: Math.max(5, Math.min(95, x)),
+        y: -12 - stagger,
+        speed:
+          DIFFICULTY[difficulty].speedMin * 0.85 +
+          Math.random() * (DIFFICULTY[difficulty].speedMax - DIFFICULTY[difficulty].speedMin) * 0.4,
+      });
+    }
+  }
+
+  function maybeTriggerEgg(dtMs) {
+    if (egg || state !== "playing") return;
+    eggPlayTime += dtMs;
+    eggCooldown = Math.max(0, eggCooldown - dtMs);
+    if (eggPlayTime < EGG_MIN_PLAY_MS) return;
+    if (eggCooldown > 0) return;
+    // ~2% chance per second once eligible → roughly every 30–50s plus cooldown
+    const chancePerSec =
+      difficulty === "easy" ? 0.035 : difficulty === "hard" ? 0.05 : 0.04;
+    if (Math.random() < chancePerSec * (dtMs / 1000)) {
+      startEggWave();
+    }
+  }
+
+  function endEgg(success) {
+    if (!egg) return;
+    const letter = egg.letter;
+    stage.classList.remove("egg-active");
+    if (success) {
+      const cfg = DIFFICULTY[difficulty];
+      const bonus = cfg.scoreBase * EGG_COUNT * 3;
+      score += bonus;
+      combo += 5;
+      maxCombo = Math.max(maxCombo, combo);
+      updateHud();
+      // floating bonus in center
+      floatScore(50, 45, bonus);
+      triggerEggClearFx(letter);
+    } else {
+      // mark leftover egg balloons as normal so they don't block forever
+      balloons.forEach((b) => {
+        if (b.egg) {
+          b.egg = false;
+          b.el.classList.remove("egg");
+        }
+      });
+      showToast("彩蛋中断…", "egg-fail");
+    }
+    egg = null;
+    eggCooldown = EGG_COOLDOWN_MS;
+  }
+
   function popBalloon(b) {
     const cfg = DIFFICULTY[difficulty];
     combo += 1;
     maxCombo = Math.max(maxCombo, combo);
     const mult = 1 + Math.min(combo - 1, 12) * 0.12;
-    const pts = Math.round(cfg.scoreBase * mult);
+    let pts = Math.round(cfg.scoreBase * mult);
+    if (b.egg) pts = Math.round(pts * 1.5);
     score += pts;
     popped += 1;
 
@@ -415,6 +621,14 @@
     b.el.classList.add("popping");
     balloons = balloons.filter((x) => x.id !== b.id);
     setTimeout(() => b.el.remove(), 350);
+
+    if (b.egg && egg) {
+      egg.remaining -= 1;
+      if (egg.remaining <= 0) {
+        endEgg(true);
+      }
+    }
+
     updateHud();
   }
 
@@ -425,6 +639,11 @@
     b.el.classList.add("escape");
     balloons = balloons.filter((x) => x.id !== b.id);
     setTimeout(() => b.el.remove(), 400);
+
+    if (b.egg && egg) {
+      endEgg(false);
+    }
+
     updateHud();
     if (lives <= 0) endGame();
   }
@@ -439,12 +658,15 @@
     const cfg = DIFFICULTY[difficulty];
     const stageH = stage.clientHeight || 400;
 
+    maybeTriggerEgg(dt * 1000);
+
     spawnAcc += dt * 1000;
     // Easy barely speeds up; hard ramps more
     const floor = difficulty === "easy" ? 0.82 : difficulty === "hard" ? 0.48 : 0.58;
     const rampScale = difficulty === "easy" ? 8000 : 4000;
     const ramp = Math.max(floor, 1 - score / rampScale);
-    if (spawnAcc >= cfg.spawnMs * ramp) {
+    // Pause normal spawns while egg wave is active
+    if (!egg && spawnAcc >= cfg.spawnMs * ramp) {
       spawnAcc = 0;
       spawnBalloon();
     }
@@ -452,7 +674,7 @@
     for (const b of [...balloons]) {
       b.y += (b.speed * dt * 100) / stageH;
       b.el.style.bottom = `${b.y}%`;
-      const sway = Math.sin(ts / 480 + b.id * 1.7) * 5;
+      const sway = Math.sin(ts / 480 + b.id * 1.7) * (b.egg ? 8 : 5);
       b.el.style.transform = `translateX(calc(-50% + ${sway}px))`;
       if (b.y > 100) loseLife(b);
     }
@@ -464,6 +686,8 @@
   function clearBalloons() {
     balloons.forEach((b) => b.el.remove());
     balloons = [];
+    egg = null;
+    stage.classList.remove("egg-active", "egg-celebrate");
   }
 
   function showMenu(title, msg, btnText, stats) {
@@ -514,6 +738,9 @@
     spawnAcc = difficulty === "easy" ? cfg.spawnMs * 0.85 : cfg.spawnMs * 0.45;
     lastTs = 0;
     nextId = 1;
+    egg = null;
+    eggCooldown = 8000;
+    eggPlayTime = 0;
     clearBalloons();
     updateHud();
     hideOverlay();
