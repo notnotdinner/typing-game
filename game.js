@@ -10,28 +10,28 @@
   const DIFFICULTY = {
     easy: {
       label: "简单",
-      spawnMs: 1400,
-      speedMin: 18,
-      speedMax: 32,
-      maxBalloons: 6,
+      spawnMs: 2400, // slow spawn — plenty of time to react
+      speedMin: 10,
+      speedMax: 18,
+      maxBalloons: 4,
       lives: 5,
       scoreBase: 10,
     },
     normal: {
       label: "普通",
-      spawnMs: 950,
-      speedMin: 28,
-      speedMax: 48,
-      maxBalloons: 8,
+      spawnMs: 1100,
+      speedMin: 24,
+      speedMax: 42,
+      maxBalloons: 7,
       lives: 3,
       scoreBase: 15,
     },
     hard: {
       label: "困难",
-      spawnMs: 650,
-      speedMin: 42,
-      speedMax: 70,
-      maxBalloons: 11,
+      spawnMs: 700,
+      speedMin: 40,
+      speedMax: 68,
+      maxBalloons: 10,
       lives: 3,
       scoreBase: 25,
     },
@@ -148,77 +148,148 @@
 
   function stopMusic() {
     if (musicNodes) {
+      if (musicNodes.timers) {
+        musicNodes.timers.forEach((id) => clearInterval(id));
+      }
       if (musicNodes.arpId) clearInterval(musicNodes.arpId);
       try {
-        musicNodes.gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
         const nodes = musicNodes;
+        if (nodes.gain && audioCtx) {
+          nodes.gain.gain.cancelScheduledValues(audioCtx.currentTime);
+          nodes.gain.gain.setValueAtTime(nodes.gain.gain.value, audioCtx.currentTime);
+          nodes.gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.15);
+        }
         setTimeout(() => {
           try {
-            nodes.osc1.stop();
-            nodes.osc2.stop();
-            nodes.lfo.stop();
+            (nodes.oscillators || []).forEach((o) => {
+              try {
+                o.stop();
+              } catch (_) {}
+            });
           } catch (_) {}
-        }, 250);
+        }, 200);
       } catch (_) {}
       musicNodes = null;
     }
     musicPlaying = false;
   }
 
+  // Cheerful major-key loop: plucky melody + light bass + soft pulse
   function startMusic() {
     if (!musicOn) return;
     const ctx = ensureAudio();
     if (!ctx || musicPlaying) return;
 
     const master = ctx.createGain();
-    master.gain.value = 0.045;
+    master.gain.value = 0.0;
     master.connect(ctx.destination);
+    // fade in gently
+    master.gain.linearRampToValueAtTime(0.055, ctx.currentTime + 0.4);
 
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
+    // Soft high shelf / bright filter so it feels airy, not dark
     const filter = ctx.createBiquadFilter();
-
-    osc1.type = "sine";
-    osc2.type = "triangle";
-    osc1.frequency.value = 196;
-    osc2.frequency.value = 246.94;
     filter.type = "lowpass";
-    filter.frequency.value = 900;
-    lfo.type = "sine";
-    lfo.frequency.value = 0.12;
-    lfoGain.gain.value = 0.012;
-    lfo.connect(lfoGain);
-    lfoGain.connect(master.gain);
-
-    osc1.connect(filter);
-    osc2.connect(filter);
+    filter.frequency.value = 3200;
+    filter.Q.value = 0.6;
     filter.connect(master);
 
-    const notes = [196, 246.94, 293.66, 329.63, 293.66, 246.94];
+    // --- Bass: bouncing root notes (C major-ish) ---
+    const bassOsc = ctx.createOscillator();
+    const bassGain = ctx.createGain();
+    bassOsc.type = "triangle";
+    bassOsc.frequency.value = 130.81; // C3
+    bassGain.gain.value = 0.0;
+    bassOsc.connect(bassGain);
+    bassGain.connect(filter);
+    bassOsc.start();
+
+    // --- Melody: bright square (softened) ---
+    const melOsc = ctx.createOscillator();
+    const melGain = ctx.createGain();
+    melOsc.type = "triangle";
+    melOsc.frequency.value = 523.25; // C5
+    melGain.gain.value = 0.0;
+    melOsc.connect(melGain);
+    melGain.connect(filter);
+    melOsc.start();
+
+    // --- Harmony third (gentle) ---
+    const harmOsc = ctx.createOscillator();
+    const harmGain = ctx.createGain();
+    harmOsc.type = "sine";
+    harmOsc.frequency.value = 659.25; // E5
+    harmGain.gain.value = 0.0;
+    harmOsc.connect(harmGain);
+    harmGain.connect(filter);
+    harmOsc.start();
+
+    // Major, bouncy motif (Hz). Pattern feels like a simple kids' game jingle.
+    // C major: C D E G A, with rests as 0
+    const melody = [
+      523.25, 587.33, 659.25, 783.99, // C D E G
+      659.25, 587.33, 523.25, 0, // E D C rest
+      587.33, 659.25, 783.99, 880.0, // D E G A
+      783.99, 659.25, 587.33, 523.25, // G E D C
+      659.25, 783.99, 880.0, 1046.5, // E G A C'
+      880.0, 783.99, 659.25, 0, // A G E rest
+      523.25, 659.25, 783.99, 659.25, // C E G E
+      587.33, 523.25, 392.0, 523.25, // D C G C
+    ];
+    // Bass roots under 4-note chunks
+    const bassLine = [
+      130.81, 130.81, 146.83, 146.83, // C C D D
+      164.81, 164.81, 130.81, 130.81, // E E C C
+      146.83, 146.83, 174.61, 174.61, // D D F F
+      196.0, 164.81, 146.83, 130.81, // G E D C
+    ];
+
+    const beatMs = 220; // upbeat ~136 BPM eighths
     let step = 0;
-    const arpId = setInterval(() => {
+    musicPlaying = true;
+
+    function pluck(gainNode, peak, durSec) {
+      const t = ctx.currentTime;
+      gainNode.gain.cancelScheduledValues(t);
+      gainNode.gain.setValueAtTime(0.0001, t);
+      gainNode.gain.exponentialRampToValueAtTime(peak, t + 0.018);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, t + durSec);
+    }
+
+    const tickId = setInterval(() => {
       if (!musicPlaying || !audioCtx) {
-        clearInterval(arpId);
+        clearInterval(tickId);
         return;
       }
       try {
-        const n = notes[step % notes.length];
-        osc1.frequency.setTargetAtTime(n, audioCtx.currentTime, 0.08);
-        osc2.frequency.setTargetAtTime(n * 1.5, audioCtx.currentTime, 0.08);
+        const t = audioCtx.currentTime;
+        const m = melody[step % melody.length];
+        const b = bassLine[Math.floor(step / 2) % bassLine.length];
+
+        // bass every other step (quarter feel)
+        if (step % 2 === 0) {
+          bassOsc.frequency.setValueAtTime(b, t);
+          pluck(bassGain, 0.085, 0.28);
+        }
+
+        if (m > 0) {
+          melOsc.frequency.setValueAtTime(m, t);
+          // light third above melody
+          harmOsc.frequency.setValueAtTime(m * 1.25, t);
+          pluck(melGain, 0.07, 0.16);
+          pluck(harmGain, 0.028, 0.14);
+        }
+
         step += 1;
       } catch (_) {
-        clearInterval(arpId);
+        clearInterval(tickId);
       }
-    }, 900);
+    }, beatMs);
 
-    osc1.start();
-    osc2.start();
-    lfo.start();
-
-    musicNodes = { osc1, osc2, lfo, gain: master, arpId };
-    musicPlaying = true;
+    musicNodes = {
+      oscillators: [bassOsc, melOsc, harmOsc],
+      gain: master,
+      timers: [tickId],
+    };
   }
 
   function syncAudioButtons() {
@@ -370,7 +441,10 @@
     const stageH = stage.clientHeight || 400;
 
     spawnAcc += dt * 1000;
-    const ramp = Math.max(0.5, 1 - score / 4000);
+    // Easy barely speeds up; hard ramps more
+    const floor = difficulty === "easy" ? 0.82 : difficulty === "hard" ? 0.48 : 0.58;
+    const rampScale = difficulty === "easy" ? 8000 : 4000;
+    const ramp = Math.max(floor, 1 - score / rampScale);
     if (spawnAcc >= cfg.spawnMs * ramp) {
       spawnAcc = 0;
       spawnBalloon();
@@ -435,7 +509,7 @@
     lives = cfg.lives;
     popped = 0;
     lastKey = "";
-    spawnAcc = cfg.spawnMs * 0.5;
+    spawnAcc = difficulty === "easy" ? cfg.spawnMs * 0.85 : cfg.spawnMs * 0.45;
     lastTs = 0;
     nextId = 1;
     clearBalloons();
@@ -445,13 +519,16 @@
     playStart();
     if (musicOn) startMusic();
     focusInput();
+    // Easy starts with 1 balloon so players can settle in
     spawnBalloon();
-    setTimeout(() => {
-      if (state === "playing") spawnBalloon();
-    }, 350);
-    setTimeout(() => {
-      if (state === "playing") spawnBalloon();
-    }, 700);
+    if (difficulty !== "easy") {
+      setTimeout(() => {
+        if (state === "playing") spawnBalloon();
+      }, 400);
+      setTimeout(() => {
+        if (state === "playing") spawnBalloon();
+      }, 800);
+    }
     rafId = requestAnimationFrame(loop);
   }
 
