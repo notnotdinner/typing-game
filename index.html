@@ -3,48 +3,49 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Type Rush · 键盘打字</title>
+  <title>气球打字 · Balloon Pop</title>
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌨️</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>" />
 </head>
 <body>
   <div class="app">
     <header class="header">
       <div class="title-row">
-        <h1>⌨️ Type Rush</h1>
-        <p class="subtitle">键盘打字挑战 · 测速 · 练准</p>
+        <h1>🎈 气球打字</h1>
+        <p class="subtitle">Balloon Pop · 打字消灭上升的气球</p>
       </div>
-      <div class="mode-bar" role="group" aria-label="模式">
-        <button type="button" class="mode-btn active" data-mode="60">60 秒</button>
-        <button type="button" class="mode-btn" data-mode="30">30 秒</button>
-        <button type="button" class="mode-btn" data-mode="15">15 秒</button>
-        <button type="button" class="mode-btn" data-mode="quote">短文</button>
+      <div class="audio-toggles">
+        <button type="button" id="btn-music" class="icon-btn active" title="背景音乐" aria-label="切换背景音乐">🎵</button>
+        <button type="button" id="btn-sfx" class="icon-btn active" title="音效" aria-label="切换音效">🔊</button>
       </div>
     </header>
 
     <div class="hud">
       <div class="stat">
-        <span class="label">WPM</span>
-        <span id="wpm" class="value">0</span>
+        <span class="label">得分</span>
+        <span id="score" class="value">0</span>
       </div>
       <div class="stat">
-        <span class="label">准确率</span>
-        <span id="accuracy" class="value">100%</span>
+        <span class="label">连击</span>
+        <span id="combo" class="value">0</span>
       </div>
       <div class="stat">
-        <span class="label">时间</span>
-        <span id="timer" class="value">60</span>
+        <span class="label">生命</span>
+        <span id="lives" class="value">❤️❤️❤️</span>
       </div>
       <div class="stat">
-        <span class="label">最高 WPM</span>
+        <span class="label">最高分</span>
         <span id="best" class="value">0</span>
       </div>
     </div>
 
-    <div class="stage">
-      <div id="prompt" class="prompt" aria-live="polite"></div>
-      <div class="caret-line">
-        <span id="typed-hint" class="typed-hint">点击此处或开始输入…</span>
+    <div class="stage" id="stage">
+      <div id="sky" class="sky" aria-hidden="true"></div>
+      <div id="balloons" class="balloons" aria-live="polite"></div>
+      <div class="typed-bar">
+        <span class="typed-label">输入</span>
+        <span id="typed" class="typed-text"></span>
+        <span class="caret"></span>
       </div>
       <input
         id="input"
@@ -56,30 +57,41 @@
         spellcheck="false"
         aria-label="打字输入"
       />
+
+      <!-- Start / settings overlay -->
       <div id="overlay" class="overlay">
         <div class="overlay-card">
-          <h2 id="overlay-title">准备开始</h2>
-          <p id="overlay-msg">接上键盘，按任意字母键或点「开始」</p>
+          <h2 id="overlay-title">🎈 气球打字</h2>
+          <p id="overlay-msg">气球从下方升起，打出上面的文字即可炸掉它们。别让气球飞出顶部！</p>
+
+          <div id="settings" class="settings">
+            <div class="setting-group">
+              <span class="setting-label">难度</span>
+              <div class="seg" role="group" aria-label="难度">
+                <button type="button" class="seg-btn active" data-diff="easy">简单</button>
+                <button type="button" class="seg-btn" data-diff="normal">普通</button>
+                <button type="button" class="seg-btn" data-diff="hard">困难</button>
+              </div>
+            </div>
+            <div class="setting-group">
+              <span class="setting-label">数字</span>
+              <label class="switch">
+                <input type="checkbox" id="opt-numbers" />
+                <span class="switch-ui"></span>
+                <span class="switch-text" id="numbers-label">关闭（仅字母单词）</span>
+              </label>
+            </div>
+          </div>
+
           <div id="result-stats" class="result-stats hidden"></div>
-          <button id="start-btn" type="button">开始挑战</button>
+          <button id="start-btn" type="button">开始游戏</button>
         </div>
       </div>
     </div>
 
-    <div class="meta-row">
-      <div class="lang-bar" role="group" aria-label="词库">
-        <button type="button" class="lang-btn active" data-lang="en">English</button>
-        <button type="button" class="lang-btn" data-lang="code">Code</button>
-        <button type="button" class="lang-btn" data-lang="mix">Mix</button>
-      </div>
-      <p class="hint">
-        <kbd>Esc</kbd> 重置 · <kbd>Tab</kbd> 再来一局 · 支持蓝牙键盘（iPad / Mac）
-      </p>
-    </div>
-
-    <div class="progress-wrap" aria-hidden="true">
-      <div id="progress" class="progress"></div>
-    </div>
+    <p class="hint">
+      打字匹配气球上的文字 · <kbd>Backspace</kbd> 删字 · <kbd>Esc</kbd> 暂停/菜单 · 支持外接键盘
+    </p>
 
     <footer class="footer">
       <span>notnotdinner / typing-game</span>

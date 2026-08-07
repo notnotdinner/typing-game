@@ -1,354 +1,730 @@
 (() => {
-  const BEST_KEY = "typing-game.bestWpm";
-  const MODE_KEY = "typing-game.mode";
-  const LANG_KEY = "typing-game.lang";
+  const STORAGE = {
+    best: "balloon-pop.best",
+    diff: "balloon-pop.diff",
+    numbers: "balloon-pop.numbers",
+    music: "balloon-pop.music",
+    sfx: "balloon-pop.sfx",
+  };
 
-  const promptEl = document.getElementById("prompt");
+  const DIFFICULTY = {
+    easy: {
+      label: "简单",
+      spawnMs: 1800,
+      speedMin: 22,
+      speedMax: 38,
+      maxBalloons: 5,
+      lives: 5,
+      scoreBase: 10,
+    },
+    normal: {
+      label: "普通",
+      spawnMs: 1200,
+      speedMin: 32,
+      speedMax: 55,
+      maxBalloons: 7,
+      lives: 3,
+      scoreBase: 15,
+    },
+    hard: {
+      label: "困难",
+      spawnMs: 850,
+      speedMin: 48,
+      speedMax: 78,
+      maxBalloons: 9,
+      lives: 3,
+      scoreBase: 25,
+    },
+  };
+
+  const COLORS = [
+    { body: "#ff6b6b", knot: "#e05555" },
+    { body: "#ff9f43", knot: "#e08a30" },
+    { body: "#feca57", knot: "#e0b040" },
+    { body: "#1dd1a1", knot: "#10b888" },
+    { body: "#54a0ff", knot: "#3d8ae0" },
+    { body: "#5f27cd", knot: "#4a1fa8" },
+    { body: "#ff9ff3", knot: "#e07fd5" },
+    { body: "#48dbfb", knot: "#30c0e0" },
+  ];
+
+  // DOM
+  const stage = document.getElementById("stage");
+  const balloonsEl = document.getElementById("balloons");
+  const skyEl = document.getElementById("sky");
+  const typedEl = document.getElementById("typed");
   const inputEl = document.getElementById("input");
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlay-title");
   const overlayMsg = document.getElementById("overlay-msg");
+  const settingsEl = document.getElementById("settings");
   const resultStats = document.getElementById("result-stats");
   const startBtn = document.getElementById("start-btn");
-  const typedHint = document.getElementById("typed-hint");
-  const wpmEl = document.getElementById("wpm");
-  const accuracyEl = document.getElementById("accuracy");
-  const timerEl = document.getElementById("timer");
+  const scoreEl = document.getElementById("score");
+  const comboEl = document.getElementById("combo");
+  const livesEl = document.getElementById("lives");
   const bestEl = document.getElementById("best");
-  const progressEl = document.getElementById("progress");
-  const stage = document.querySelector(".stage");
+  const numbersOpt = document.getElementById("opt-numbers");
+  const numbersLabel = document.getElementById("numbers-label");
+  const btnMusic = document.getElementById("btn-music");
+  const btnSfx = document.getElementById("btn-sfx");
 
-  let mode = localStorage.getItem(MODE_KEY) || "60"; // 60 | 30 | 15 | quote
-  let lang = localStorage.getItem(LANG_KEY) || "en";
-  let best = Number(localStorage.getItem(BEST_KEY) || 0);
-  bestEl.textContent = String(best);
+  // State
+  let difficulty = localStorage.getItem(STORAGE.diff) || "normal";
+  let includeNumbers = localStorage.getItem(STORAGE.numbers) === "1";
+  let musicOn = localStorage.getItem(STORAGE.music) !== "0";
+  let sfxOn = localStorage.getItem(STORAGE.sfx) !== "0";
+  let best = Number(localStorage.getItem(STORAGE.best) || 0);
 
-  let target = "";
-  let index = 0;
-  let correctCount = 0;
-  let errorCount = 0;
-  let startedAt = 0;
-  let endsAt = 0;
-  let timerId = null;
-  let liveId = null;
-  let state = "ready"; // ready | playing | done
-  let charStates = []; // correct | incorrect | pending
+  let state = "menu"; // menu | playing | paused | over
+  let score = 0;
+  let combo = 0;
+  let maxCombo = 0;
+  let lives = 3;
+  let popped = 0;
+  let typed = "";
+  let balloons = []; // { id, word, x, y, speed, color, el }
+  let nextId = 1;
+  let spawnAcc = 0;
+  let lastTs = 0;
+  let rafId = null;
+  let activeWord = null; // currently targeted balloon word (prefix match)
 
-  // --- helpers ---
-  function shuffle(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
+  // --- Audio (Web Audio API, no external files) ---
+  let audioCtx = null;
+  let musicNodes = null;
+  let musicPlaying = false;
+
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
     }
-    return a;
-  }
-
-  function buildText() {
-    if (mode === "quote") {
-      const q = window.QUOTES[Math.floor(Math.random() * window.QUOTES.length)];
-      return q;
+    if (audioCtx.state === "suspended") {
+      audioCtx.resume().catch(() => {});
     }
-    const bank = window.WORD_BANKS[lang] || window.WORD_BANKS.en;
-    const words = shuffle(bank);
-    // enough words for timed modes
-    const need = mode === "15" ? 40 : mode === "30" ? 70 : 120;
-    const picked = [];
-    while (picked.length < need) {
-      picked.push(...shuffle(words));
+    return audioCtx;
+  }
+
+  function tone(freq, dur, type = "sine", gain = 0.12, when = 0) {
+    const ctx = ensureAudio();
+    if (!ctx || !sfxOn) return;
+    const t0 = ctx.currentTime + when;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g);
+    g.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  }
+
+  function playPop() {
+    // short noise-ish chirp burst
+    tone(520, 0.08, "triangle", 0.1);
+    tone(780, 0.1, "sine", 0.07, 0.03);
+    tone(220, 0.12, "square", 0.04, 0.02);
+  }
+
+  function playType() {
+    tone(880 + Math.random() * 120, 0.04, "sine", 0.035);
+  }
+
+  function playMiss() {
+    tone(180, 0.18, "sawtooth", 0.07);
+    tone(120, 0.22, "triangle", 0.05, 0.05);
+  }
+
+  function playGameOver() {
+    tone(330, 0.2, "triangle", 0.1);
+    tone(260, 0.25, "triangle", 0.09, 0.15);
+    tone(196, 0.4, "sine", 0.1, 0.35);
+  }
+
+  function playStart() {
+    tone(392, 0.1, "sine", 0.08);
+    tone(523, 0.1, "sine", 0.08, 0.1);
+    tone(659, 0.18, "sine", 0.09, 0.2);
+  }
+
+  function stopMusic() {
+    if (musicNodes) {
+      if (musicNodes.arpId) clearInterval(musicNodes.arpId);
+      try {
+        musicNodes.gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
+        const nodes = musicNodes;
+        setTimeout(() => {
+          try {
+            nodes.osc1.stop();
+            nodes.osc2.stop();
+            nodes.lfo.stop();
+          } catch (_) {}
+        }, 250);
+      } catch (_) {}
+      musicNodes = null;
     }
-    return picked.slice(0, need).join(" ");
+    musicPlaying = false;
   }
 
-  function durationSec() {
-    if (mode === "quote") return null;
-    return Number(mode);
+  function startMusic() {
+    if (!musicOn) return;
+    const ctx = ensureAudio();
+    if (!ctx || musicPlaying) return;
+
+    const master = ctx.createGain();
+    master.gain.value = 0.045;
+    master.connect(ctx.destination);
+
+    // Soft dual-osc pad with slow LFO
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc1.type = "sine";
+    osc2.type = "triangle";
+    osc1.frequency.value = 196; // G3
+    osc2.frequency.value = 246.94; // B3
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    lfo.type = "sine";
+    lfo.frequency.value = 0.12;
+    lfoGain.gain.value = 0.012;
+    lfo.connect(lfoGain);
+    lfoGain.connect(master.gain);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(master);
+
+    // Simple arpeggio pattern via scheduled freqs
+    const notes = [196, 246.94, 293.66, 329.63, 293.66, 246.94];
+    let step = 0;
+    const arpId = setInterval(() => {
+      if (!musicPlaying || !audioCtx) {
+        clearInterval(arpId);
+        return;
+      }
+      try {
+        const n = notes[step % notes.length];
+        osc1.frequency.setTargetAtTime(n, audioCtx.currentTime, 0.08);
+        osc2.frequency.setTargetAtTime(n * 1.5, audioCtx.currentTime, 0.08);
+        step += 1;
+      } catch (_) {
+        clearInterval(arpId);
+      }
+    }, 900);
+
+    osc1.start();
+    osc2.start();
+    lfo.start();
+
+    musicNodes = { osc1, osc2, lfo, gain: master, arpId };
+    musicPlaying = true;
   }
 
-  function elapsedSec() {
-    if (!startedAt) return 0;
-    return Math.max(0, (Date.now() - startedAt) / 1000);
+  function syncAudioButtons() {
+    btnMusic.classList.toggle("active", musicOn);
+    btnSfx.classList.toggle("active", sfxOn);
   }
 
-  function calcWpm() {
-    const mins = elapsedSec() / 60;
-    if (mins <= 0) return 0;
-    // standard: correct chars / 5 / minutes
-    return Math.round((correctCount / 5) / mins);
+  // --- Clouds decoration ---
+  function spawnClouds() {
+    skyEl.innerHTML = "";
+    for (let i = 0; i < 5; i++) {
+      const c = document.createElement("div");
+      c.className = "cloud";
+      const w = 60 + Math.random() * 100;
+      c.style.width = `${w}px`;
+      c.style.height = `${w * 0.35}px`;
+      c.style.top = `${8 + Math.random() * 45}%`;
+      c.style.left = `${-20 - Math.random() * 40}%`;
+      c.style.opacity = String(0.35 + Math.random() * 0.35);
+      c.style.animationDuration = `${40 + Math.random() * 40}s`;
+      c.style.animationDelay = `${-Math.random() * 40}s`;
+      skyEl.appendChild(c);
+    }
   }
 
-  function calcAccuracy() {
-    const total = correctCount + errorCount;
-    if (total === 0) return 100;
-    return Math.max(0, Math.round((correctCount / total) * 100));
+  // --- HUD ---
+  function hearts(n) {
+    if (n <= 0) return "💔";
+    return "❤️".repeat(n);
   }
 
   function updateHud() {
-    wpmEl.textContent = String(calcWpm());
-    accuracyEl.textContent = `${calcAccuracy()}%`;
+    scoreEl.textContent = String(score);
+    comboEl.textContent = String(combo);
+    livesEl.textContent = hearts(lives);
+    bestEl.textContent = String(best);
+    typedEl.textContent = typed;
+  }
 
-    const dur = durationSec();
-    if (dur == null) {
-      // quote: show remaining chars or elapsed
-      const left = Math.max(0, target.length - index);
-      timerEl.textContent = state === "playing" ? String(left) : String(target.length || "—");
-      const pct = target.length ? (index / target.length) * 100 : 0;
-      progressEl.style.width = `${pct}%`;
+  function syncSettingsUI() {
+    document.querySelectorAll(".seg-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.diff === difficulty);
+    });
+    numbersOpt.checked = includeNumbers;
+    numbersLabel.textContent = includeNumbers
+      ? "开启（含数字 / 字母数字混合）"
+      : "关闭（仅字母单词）";
+  }
+
+  // --- Balloon lifecycle ---
+  function uniqueWord() {
+    const used = new Set(balloons.map((b) => b.word));
+    let word;
+    let tries = 0;
+    do {
+      word = window.pickToken(difficulty, includeNumbers);
+      tries += 1;
+    } while (used.has(word) && tries < 40);
+    return word;
+  }
+
+  function spawnBalloon() {
+    const cfg = DIFFICULTY[difficulty];
+    if (balloons.length >= cfg.maxBalloons) return;
+
+    const word = uniqueWord();
+    // avoid overlapping x too tightly
+    let x = 10 + Math.random() * 80;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const clash = balloons.some((b) => Math.abs(b.x - x) < 10 && b.y < 25);
+      if (!clash) break;
+      x = 10 + Math.random() * 80;
+    }
+
+    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const speed =
+      cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
+    // longer words a bit slower for fairness
+    const lenFactor = Math.max(0.7, 1 - (word.length - 3) * 0.04);
+    const finalSpeed = speed * lenFactor;
+
+    const el = document.createElement("div");
+    el.className = "balloon";
+    el.style.left = `${x}%`;
+    el.style.bottom = `-80px`;
+    el.innerHTML = `
+      <div class="body" style="background:${color.body};color:#fff">
+        <span class="word-rest">${escapeHtml(word)}</span>
+      </div>
+      <div class="knot" style="border-top-color:${color.knot}"></div>
+      <div class="string"></div>
+    `;
+    balloonsEl.appendChild(el);
+
+    balloons.push({
+      id: nextId++,
+      word,
+      x,
+      y: -8, // percent of stage height (negative = below)
+      speed: finalSpeed,
+      color,
+      el,
+    });
+  }
+
+  function escapeHtml(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function highlightBalloon(b) {
+    const body = b.el.querySelector(".body");
+    if (!body) return;
+    const w = b.word;
+    if (typed && w.startsWith(typed)) {
+      body.innerHTML =
+        `<span class="word-match">${escapeHtml(typed)}</span>` +
+        `<span class="word-rest">${escapeHtml(w.slice(typed.length))}</span>`;
+      b.el.style.zIndex = "4";
+      b.el.style.filter = "brightness(1.08)";
     } else {
-      let left = dur;
-      if (state === "playing") {
-        left = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      body.innerHTML = `<span class="word-rest">${escapeHtml(w)}</span>`;
+      b.el.style.zIndex = "";
+      b.el.style.filter = "";
+    }
+  }
+
+  function refreshHighlights() {
+    for (const b of balloons) highlightBalloon(b);
+  }
+
+  function floatScore(xPct, yPct, pts) {
+    const stageRect = stage.getBoundingClientRect();
+    const el = document.createElement("div");
+    el.className = "float-score";
+    el.textContent = `+${pts}`;
+    el.style.left = `${(xPct / 100) * stageRect.width}px`;
+    // y is bottom-based percent → convert
+    el.style.bottom = `${(yPct / 100) * stageRect.height + 40}px`;
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 700);
+  }
+
+  function popBalloon(b) {
+    const cfg = DIFFICULTY[difficulty];
+    combo += 1;
+    maxCombo = Math.max(maxCombo, combo);
+    const mult = 1 + Math.min(combo - 1, 10) * 0.15;
+    const pts = Math.round(cfg.scoreBase * mult * (1 + b.word.length * 0.08));
+    score += pts;
+    popped += 1;
+
+    floatScore(b.x, b.y, pts);
+    playPop();
+
+    b.el.classList.add("popping");
+    balloons = balloons.filter((x) => x.id !== b.id);
+    setTimeout(() => b.el.remove(), 350);
+
+    if (typed === b.word || b.word.startsWith(typed)) {
+      // clear typed only if it was matching this balloon
+      if (activeWord === b.word || typed === b.word) {
+        typed = "";
+        activeWord = null;
       }
-      timerEl.textContent = String(left);
-      const pct = state === "playing" ? ((dur - left) / dur) * 100 : 0;
-      progressEl.style.width = `${Math.min(100, pct)}%`;
     }
+    // if remaining balloons don't match current typed, clear
+    if (typed && !balloons.some((x) => x.word.startsWith(typed))) {
+      typed = "";
+      activeWord = null;
+    }
+
+    updateHud();
+    refreshHighlights();
   }
 
-  function renderPrompt() {
-    const frag = document.createDocumentFragment();
-    for (let i = 0; i < target.length; i++) {
-      const span = document.createElement("span");
-      span.className = "char";
-      const ch = target[i];
-      span.textContent = ch === " " ? "\u00a0" : ch;
-      if (i === index && state === "playing") {
-        span.classList.add("current");
-      } else if (charStates[i] === "correct") {
-        span.classList.add("correct");
-      } else if (charStates[i] === "incorrect") {
-        span.classList.add("incorrect");
-      } else {
-        span.classList.add("pending");
+  function loseLife(b) {
+    lives -= 1;
+    combo = 0;
+    playMiss();
+    b.el.classList.add("escape");
+    balloons = balloons.filter((x) => x.id !== b.id);
+    setTimeout(() => b.el.remove(), 400);
+
+    if (typed && (activeWord === b.word || b.word.startsWith(typed))) {
+      if (!balloons.some((x) => x.word.startsWith(typed))) {
+        typed = "";
+        activeWord = null;
       }
-      frag.appendChild(span);
     }
-    promptEl.replaceChildren(frag);
-  }
 
-  function setOverlay(show, title, msg, btnText, stats) {
-    if (show) {
-      overlay.classList.remove("hidden");
-      overlayTitle.textContent = title;
-      overlayMsg.innerHTML = msg;
-      startBtn.textContent = btnText;
-      if (stats) {
-        resultStats.classList.remove("hidden");
-        resultStats.innerHTML = `
-          <div class="box"><span class="k">WPM</span><span class="v">${stats.wpm}</span></div>
-          <div class="box"><span class="k">准确率</span><span class="v">${stats.acc}%</span></div>
-          <div class="box"><span class="k">正确/错误</span><span class="v">${stats.ok}/${stats.err}</span></div>
-        `;
-      } else {
-        resultStats.classList.add("hidden");
-        resultStats.innerHTML = "";
-      }
-    } else {
-      overlay.classList.add("hidden");
+    updateHud();
+    if (lives <= 0) {
+      endGame();
     }
   }
 
-  function stopClocks() {
-    if (timerId) {
-      clearTimeout(timerId);
-      timerId = null;
-    }
-    if (liveId) {
-      clearInterval(liveId);
-      liveId = null;
-    }
-  }
-
-  function finish() {
+  // --- Game loop ---
+  function loop(ts) {
     if (state !== "playing") return;
-    state = "done";
-    stopClocks();
-    const wpm = calcWpm();
-    const acc = calcAccuracy();
-    if (wpm > best && correctCount >= 10) {
-      best = wpm;
-      localStorage.setItem(BEST_KEY, String(best));
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+
+    const cfg = DIFFICULTY[difficulty];
+    const stageH = stage.clientHeight || 400;
+
+    // spawn
+    spawnAcc += dt * 1000;
+    // slight speed-up over time
+    const ramp = Math.max(0.55, 1 - score / 5000);
+    const spawnEvery = cfg.spawnMs * ramp;
+    if (spawnAcc >= spawnEvery) {
+      spawnAcc = 0;
+      spawnBalloon();
+    }
+
+    // move balloons
+    for (const b of [...balloons]) {
+      b.y += (b.speed * dt * 100) / stageH; // percent per second approx
+      b.el.style.bottom = `${b.y}%`;
+      // slight sway
+      const sway = Math.sin(ts / 500 + b.id) * 4;
+      b.el.style.transform = `translateX(calc(-50% + ${sway}px))`;
+
+      // escaped top (body center roughly past top)
+      if (b.y > 100) {
+        loseLife(b);
+      }
+    }
+
+    rafId = requestAnimationFrame(loop);
+  }
+
+  // --- Game control ---
+  function clearBalloons() {
+    balloons.forEach((b) => b.el.remove());
+    balloons = [];
+  }
+
+  function showMenu(title, msg, btnText, stats) {
+    state = stats ? "over" : "menu";
+    overlay.classList.remove("hidden");
+    overlayTitle.textContent = title;
+    overlayMsg.innerHTML = msg;
+    startBtn.textContent = btnText;
+    settingsEl.style.display = stats ? "none" : "";
+    if (stats) {
+      resultStats.classList.remove("hidden");
+      resultStats.innerHTML = `
+        <div class="box"><span class="k">得分</span><span class="v">${stats.score}</span></div>
+        <div class="box"><span class="k">消灭</span><span class="v">${stats.popped}</span></div>
+        <div class="box"><span class="k">最高连击</span><span class="v">${stats.maxCombo}</span></div>
+      `;
+    } else {
+      resultStats.classList.add("hidden");
+      resultStats.innerHTML = "";
+    }
+  }
+
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+  }
+
+  function startGame() {
+    ensureAudio();
+    const cfg = DIFFICULTY[difficulty];
+    score = 0;
+    combo = 0;
+    maxCombo = 0;
+    lives = cfg.lives;
+    popped = 0;
+    typed = "";
+    activeWord = null;
+    spawnAcc = cfg.spawnMs * 0.6;
+    lastTs = 0;
+    nextId = 1;
+    clearBalloons();
+    updateHud();
+    hideOverlay();
+    state = "playing";
+    playStart();
+    if (musicOn) startMusic();
+    inputEl.focus();
+    // seed a couple balloons
+    spawnBalloon();
+    setTimeout(() => {
+      if (state === "playing") spawnBalloon();
+    }, 400);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function endGame() {
+    if (state !== "playing" && state !== "paused") return;
+    state = "over";
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    playGameOver();
+    // soft stop music volume or leave ambient
+    if (score > best) {
+      best = score;
+      localStorage.setItem(STORAGE.best, String(best));
       bestEl.textContent = String(best);
     }
     updateHud();
-    renderPrompt();
-    setOverlay(
-      true,
-      "本局结束",
-      "按 <kbd>Tab</kbd> 或点按钮再来一局",
+    const diffLabel = DIFFICULTY[difficulty].label;
+    const numLabel = includeNumbers ? "含数字" : "无数字";
+    showMenu(
+      "游戏结束",
+      `难度 <strong>${diffLabel}</strong> · ${numLabel}<br/>按按钮或 <kbd>Enter</kbd> 再来一局`,
       "再来一局",
-      { wpm, acc, ok: correctCount, err: errorCount }
+      { score, popped, maxCombo }
     );
-    inputEl.blur();
   }
 
-  function prepare(keepOverlay = true) {
-    stopClocks();
-    state = "ready";
-    target = buildText();
-    index = 0;
-    correctCount = 0;
-    errorCount = 0;
-    startedAt = 0;
-    endsAt = 0;
-    charStates = Array(target.length).fill("pending");
-    inputEl.value = "";
-    typedHint.classList.remove("hidden");
-    typedHint.textContent = "点击此处或开始输入…";
-    updateHud();
-    renderPrompt();
-    if (keepOverlay) {
-      const modeLabel =
-        mode === "quote" ? "短文模式" : `${mode} 秒限时`;
-      setOverlay(
-        true,
-        "准备开始",
-        `${modeLabel} · 词库 <strong>${lang}</strong><br/>接上键盘直接打字，或点「开始」`,
-        "开始挑战",
-        null
-      );
-    }
-  }
-
-  function startRun() {
-    if (state === "playing") return;
-    if (state === "done" || !target) prepare(false);
-    state = "playing";
-    startedAt = Date.now();
-    const dur = durationSec();
-    if (dur != null) {
-      endsAt = startedAt + dur * 1000;
-      timerId = setTimeout(finish, dur * 1000);
-    }
-    liveId = setInterval(updateHud, 200);
-    setOverlay(false);
-    typedHint.classList.add("hidden");
-    updateHud();
-    renderPrompt();
-    inputEl.focus();
-  }
-
-  function onChar(ch) {
-    if (state === "ready") startRun();
+  function pauseToMenu() {
     if (state !== "playing") return;
-    if (index >= target.length) return;
-
-    const expected = target[index];
-    if (ch === expected) {
-      charStates[index] = "correct";
-      correctCount += 1;
-    } else {
-      charStates[index] = "incorrect";
-      errorCount += 1;
-    }
-    index += 1;
+    state = "menu";
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+    clearBalloons();
+    typed = "";
+    activeWord = null;
     updateHud();
-    renderPrompt();
+    showMenu(
+      "已暂停",
+      "可调整难度与数字选项，然后重新开始。",
+      "继续 / 开始",
+      null
+    );
+  }
 
-    if (mode === "quote" && index >= target.length) {
-      finish();
+  // --- Input ---
+  function onType(ch) {
+    if (state !== "playing") return;
+    // only allow printable single chars we care about
+    if (!/^[\w.]$/i.test(ch) && !/^[0-9]$/.test(ch)) {
+      // also allow any single printable for flexibility
+      if (ch.length !== 1 || ch === " ") return;
     }
+
+    const next = typed + ch;
+    const matches = balloons.filter((b) => b.word.startsWith(next));
+
+    if (matches.length === 0) {
+      // wrong key — if we had a target, reset combo lightly
+      if (typed.length > 0) {
+        // keep typed if still partial? no — clear on total miss
+        typed = "";
+        activeWord = null;
+        combo = 0;
+        playMiss();
+        updateHud();
+        refreshHighlights();
+      } else {
+        // try start fresh with this char
+        const startMatches = balloons.filter((b) => b.word.startsWith(ch));
+        if (startMatches.length === 0) {
+          combo = 0;
+          playMiss();
+          updateHud();
+          return;
+        }
+        typed = ch;
+        activeWord = startMatches[0].word;
+        playType();
+      }
+    } else {
+      typed = next;
+      // prefer lowest balloon (most urgent) among matches
+      matches.sort((a, b) => b.y - a.y);
+      activeWord = matches[0].word;
+      playType();
+
+      // complete?
+      const exact = matches.find((b) => b.word === typed);
+      if (exact) {
+        popBalloon(exact);
+        return;
+      }
+    }
+
+    updateHud();
+    refreshHighlights();
   }
 
   function onBackspace() {
     if (state !== "playing") return;
-    if (index <= 0) return;
-    index -= 1;
-    // undo last classification
-    if (charStates[index] === "correct") correctCount = Math.max(0, correctCount - 1);
-    if (charStates[index] === "incorrect") errorCount = Math.max(0, errorCount - 1);
-    charStates[index] = "pending";
+    if (!typed) return;
+    typed = typed.slice(0, -1);
+    if (!typed) activeWord = null;
+    else {
+      const m = balloons.filter((b) => b.word.startsWith(typed));
+      activeWord = m.length ? m[0].word : null;
+    }
     updateHud();
-    renderPrompt();
+    refreshHighlights();
   }
 
-  // --- UI bindings ---
-  function syncModeButtons() {
-    document.querySelectorAll(".mode-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.mode === mode);
-    });
-  }
-
-  function syncLangButtons() {
-    document.querySelectorAll(".lang-btn").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.lang === lang);
-    });
-  }
-
-  document.querySelectorAll(".mode-btn").forEach((btn) => {
+  // --- Bindings ---
+  document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      mode = btn.dataset.mode;
-      localStorage.setItem(MODE_KEY, mode);
-      syncModeButtons();
-      prepare(true);
+      difficulty = btn.dataset.diff;
+      localStorage.setItem(STORAGE.diff, difficulty);
+      syncSettingsUI();
     });
   });
 
-  document.querySelectorAll(".lang-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      lang = btn.dataset.lang;
-      localStorage.setItem(LANG_KEY, lang);
-      syncLangButtons();
-      prepare(true);
-    });
+  numbersOpt.addEventListener("change", () => {
+    includeNumbers = numbersOpt.checked;
+    localStorage.setItem(STORAGE.numbers, includeNumbers ? "1" : "0");
+    syncSettingsUI();
+  });
+
+  btnMusic.addEventListener("click", () => {
+    musicOn = !musicOn;
+    localStorage.setItem(STORAGE.music, musicOn ? "1" : "0");
+    syncAudioButtons();
+    if (musicOn && state === "playing") {
+      ensureAudio();
+      startMusic();
+    } else {
+      stopMusic();
+    }
+  });
+
+  btnSfx.addEventListener("click", () => {
+    sfxOn = !sfxOn;
+    localStorage.setItem(STORAGE.sfx, sfxOn ? "1" : "0");
+    syncAudioButtons();
+    if (sfxOn) {
+      ensureAudio();
+      playType();
+    }
   });
 
   startBtn.addEventListener("click", () => {
-    if (state === "done") prepare(false);
-    startRun();
+    startGame();
   });
 
   stage.addEventListener("click", () => {
-    if (state === "done") return;
-    if (state === "ready") {
-      startRun();
-    } else {
-      inputEl.focus();
-    }
+    if (state === "playing") inputEl.focus();
   });
 
-  // Prefer raw keydown so we don't depend on IME composition for English/code
   window.addEventListener("keydown", (e) => {
-    // Tab = restart
-    if (e.key === "Tab") {
-      e.preventDefault();
-      prepare(false);
-      startRun();
-      return;
-    }
-    // Esc = reset to ready
     if (e.key === "Escape") {
       e.preventDefault();
-      prepare(true);
+      if (state === "playing") {
+        pauseToMenu();
+      } else if (state === "menu" || state === "over") {
+        // already in menu
+      }
+      return;
+    }
+
+    if (e.key === "Enter" && (state === "menu" || state === "over")) {
+      e.preventDefault();
+      startGame();
       return;
     }
 
     if (e.key === "Backspace") {
-      e.preventDefault();
-      onBackspace();
+      if (state === "playing") {
+        e.preventDefault();
+        onBackspace();
+      }
       return;
     }
 
-    // ignore modifiers / function keys
+    if (state !== "playing") return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === "Shift" || e.key === "CapsLock" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
     if (e.key.length !== 1) return;
 
     e.preventDefault();
-    onChar(e.key);
+    onType(e.key);
   });
 
-  // also focus input for mobile soft keyboard if ever needed
   inputEl.addEventListener("input", () => {
     const v = inputEl.value;
     if (!v) return;
     const ch = v[v.length - 1];
     inputEl.value = "";
-    onChar(ch);
+    onType(ch);
   });
 
   // init
-  syncModeButtons();
-  syncLangButtons();
-  prepare(true);
+  bestEl.textContent = String(best);
+  syncSettingsUI();
+  syncAudioButtons();
+  spawnClouds();
+  updateHud();
+  showMenu(
+    "🎈 气球打字",
+    "气球从下方升起，打出上面的文字即可炸掉它们。别让气球飞出顶部！",
+    "开始游戏",
+    null
+  );
 })();

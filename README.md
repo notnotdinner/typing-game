@@ -1,30 +1,39 @@
-# ⌨️ Type Rush · 键盘打字游戏
+# 🎈 气球打字 · Balloon Pop
 
-网页打字测速 / 练习，纯 HTML / CSS / JS，零依赖。适合外接蓝牙键盘的 iPad、Mac、PC。
+网页打字游戏：气球从屏幕下方不断升起，打出气球上的文字即可炸掉它们。别让气球飞出顶部！
+
+纯 **HTML / CSS / JS**，零依赖，适合 GitHub Pages 托管。支持桌面与外接键盘（iPad / Mac / PC）。
+
+## 在线游玩
+
+部署到 GitHub Pages 后访问：
+
+```
+https://notnotdinner.github.io/typing-game/
+```
+
+（需在仓库 Settings → Pages 中启用，Source 选 `main` 分支根目录。）
 
 ## 玩法
 
-| 操作 | 按键 |
+| 操作 | 说明 |
 |------|------|
-| 开始 | 任意字母键，或点「开始挑战」 |
-| 删除 | `Backspace` |
-| 再来一局 | `Tab` |
-| 重置 | `Esc` |
+| 打字 | 匹配气球上的单词 / 数字 |
+| `Backspace` | 删除已输入字符 |
+| `Esc` | 暂停并返回菜单 |
+| `Enter` | 菜单中开始 / 再来一局 |
+| 🎵 / 🔊 | 开关背景音乐 / 音效 |
 
-### 模式
+### 选项
 
-| 模式 | 说明 |
+| 选项 | 说明 |
 |------|------|
-| 60 / 30 / 15 秒 | 限时打字，时间到结算 WPM |
-| 短文 | 打完一句英文名言即结束 |
+| **简单** | 慢速、少气球、5 条生命、短词 |
+| **普通** | 中等速度与词长、3 条生命 |
+| **困难** | 快速、多气球、长词高分 |
+| **数字** | 开启后出现纯数字与字母数字混合词 |
 
-### 词库
-
-- **English** — 常用英语词
-- **Code** — 编程相关词（`const`、`async`、`git`…）
-- **Mix** — 混合
-
-HUD 显示实时 **WPM**、**准确率**、剩余时间；最高 WPM 存在浏览器 `localStorage`。
+打对气球得分，连击有倍率。气球飞出顶部会扣生命，生命归零游戏结束。最高分保存在浏览器 `localStorage`。
 
 ## 本地运行
 
@@ -34,18 +43,27 @@ python3 -m http.server 8080
 # 打开 http://localhost:8080
 ```
 
-也可直接打开 `index.html`。
+也可直接打开 `index.html`（部分浏览器对 `file://` 下音频有限制，建议用本地服务器）。
 
 ## 目录
 
 ```
 typing-game/
-├── index.html   # 页面
-├── style.css    # 样式
-├── words.js     # 词库 / 短文
-├── game.js      # 逻辑
+├── index.html   # 页面结构
+├── style.css    # 天空 / 气球样式
+├── words.js     # 词库（按难度 + 数字）
+├── game.js      # 游戏逻辑与 Web Audio
 └── README.md
 ```
+
+音效与背景音乐使用 **Web Audio API** 程序生成，无需额外音频文件。
+
+## GitHub Pages
+
+1. 推送代码到 `main`
+2. 仓库 **Settings → Pages → Build and deployment**
+3. Source: **Deploy from a branch** → Branch: `main` / `/ (root)`
+4. 保存后约一分钟可访问 `https://<user>.github.io/typing-game/`
 
 ## Orca
 
