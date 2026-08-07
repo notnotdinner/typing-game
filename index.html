@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Type Rush · 键盘打字</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌨️</text></svg>" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="title-row">
+        <h1>⌨️ Type Rush</h1>
+        <p class="subtitle">键盘打字挑战 · 测速 · 练准</p>
+      </div>
+      <div class="mode-bar" role="group" aria-label="模式">
+        <button type="button" class="mode-btn active" data-mode="60">60 秒</button>
+        <button type="button" class="mode-btn" data-mode="30">30 秒</button>
+        <button type="button" class="mode-btn" data-mode="15">15 秒</button>
+        <button type="button" class="mode-btn" data-mode="quote">短文</button>
+      </div>
+    </header>
+
+    <div class="hud">
+      <div class="stat">
+        <span class="label">WPM</span>
+        <span id="wpm" class="value">0</span>
+      </div>
+      <div class="stat">
+        <span class="label">准确率</span>
+        <span id="accuracy" class="value">100%</span>
+      </div>
+      <div class="stat">
+        <span class="label">时间</span>
+        <span id="timer" class="value">60</span>
+      </div>
+      <div class="stat">
+        <span class="label">最高 WPM</span>
+        <span id="best" class="value">0</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div id="prompt" class="prompt" aria-live="polite"></div>
+      <div class="caret-line">
+        <span id="typed-hint" class="typed-hint">点击此处或开始输入…</span>
+      </div>
+      <input
+        id="input"
+        class="hidden-input"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+        aria-label="打字输入"
+      />
+      <div id="overlay" class="overlay">
+        <div class="overlay-card">
+          <h2 id="overlay-title">准备开始</h2>
+          <p id="overlay-msg">接上键盘，按任意字母键或点「开始」</p>
+          <div id="result-stats" class="result-stats hidden"></div>
+          <button id="start-btn" type="button">开始挑战</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="meta-row">
+      <div class="lang-bar" role="group" aria-label="词库">
+        <button type="button" class="lang-btn active" data-lang="en">English</button>
+        <button type="button" class="lang-btn" data-lang="code">Code</button>
+        <button type="button" class="lang-btn" data-lang="mix">Mix</button>
+      </div>
+      <p class="hint">
+        <kbd>Esc</kbd> 重置 · <kbd>Tab</kbd> 再来一局 · 支持蓝牙键盘（iPad / Mac）
+      </p>
+    </div>
+
+    <div class="progress-wrap" aria-hidden="true">
+      <div id="progress" class="progress"></div>
+    </div>
+
+    <footer class="footer">
+      <span>notnotdinner / typing-game</span>
+      <a href="https://github.com/notnotdinner/typing-game" target="_blank" rel="noopener">GitHub</a>
+    </footer>
+  </div>
+  <script src="words.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
