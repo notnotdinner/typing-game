@@ -42,8 +42,8 @@
     <div class="stage" id="stage">
       <div id="sky" class="sky" aria-hidden="true"></div>
       <div id="balloons" class="balloons" aria-live="polite"></div>
-      <div class="typed-bar">
-        <span class="typed-label">输入</span>
+      <div class="typed-bar" id="typed-bar">
+        <span class="typed-label">刚按</span>
         <span id="typed" class="typed-text"></span>
         <span class="caret"></span>
       </div>
@@ -55,6 +55,8 @@
         autocorrect="off"
         autocapitalize="off"
         spellcheck="false"
+        inputmode="text"
+        enterkeyhint="done"
         aria-label="打字输入"
       />
 
@@ -62,7 +64,7 @@
       <div id="overlay" class="overlay">
         <div class="overlay-card">
           <h2 id="overlay-title">🎈 气球打字</h2>
-          <p id="overlay-msg">气球从下方升起，打出上面的文字即可炸掉它们。别让气球飞出顶部！</p>
+          <p id="overlay-msg">每个气球上有一个字母。按下对应键即可炸掉它。别让气球飞出顶部！</p>
 
           <div id="settings" class="settings">
             <div class="setting-group">
@@ -78,7 +80,7 @@
               <label class="switch">
                 <input type="checkbox" id="opt-numbers" />
                 <span class="switch-ui"></span>
-                <span class="switch-text" id="numbers-label">关闭（仅字母单词）</span>
+                <span class="switch-text" id="numbers-label">关闭（仅字母 a–z）</span>
               </label>
             </div>
           </div>
@@ -90,7 +92,7 @@
     </div>
 
     <p class="hint">
-      打字匹配气球上的文字 · <kbd>Backspace</kbd> 删字 · <kbd>Esc</kbd> 暂停/菜单 · 支持外接键盘
+      一气球一字母，按对应键炸掉 · <kbd>Esc</kbd> 暂停/菜单 · 支持外接键盘
     </p>
 
     <footer class="footer">
