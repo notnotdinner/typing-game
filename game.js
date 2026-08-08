@@ -746,18 +746,36 @@
     stopEmojiSpeakAnim();
     startAnim();
 
-    // Default A = "ay" (ei), never short "a" / 啊
-    const sound = entry.sound || { lang: "en-US", text: "ay", repeat: 2 };
-    const soundText = typeof sound === "string" ? sound : sound.text;
-    const soundLang = typeof sound === "string" ? "en-US" : sound.lang || "en-US";
-    const repeat = typeof sound === "string" ? 2 : sound.repeat || 2;
+    // Letter NAMES in English only. A = "ay" (/eɪ/ ei). Never Chinese「啊」.
+    let soundText = "ay";
+    let soundLang = "en-US";
+    let repeat = 2;
+    if (entry.sound) {
+      if (typeof entry.sound === "string") {
+        soundText = entry.sound;
+      } else {
+        soundText = entry.sound.text || soundText;
+        soundLang = entry.sound.lang || "en-US";
+        repeat = entry.sound.repeat != null ? entry.sound.repeat : 2;
+      }
+    }
+    // Hard lock: never speak Chinese for letter names (fixes stale/wrong data)
+    if (/[\u4e00-\u9fff]/.test(soundText) || (soundLang && soundLang.toLowerCase().startsWith("zh"))) {
+      soundText = entry.letter === "A" ? "ay" : entry.letter;
+      soundLang = "en-US";
+    }
+    // A must be letter-name "ay" (ei), not short "a"
+    if (entry.letter === "A") {
+      soundText = "ay";
+      soundLang = "en-US";
+    }
 
     // ay … ay … (gap) for (gap) apple
     const steps = [];
     for (let r = 0; r < repeat; r++) {
       steps.push({
         text: soundText,
-        lang: soundLang,
+        lang: "en-US", // force English voice path
         rate: 0.4,
         gapAfterMs: 900,
       });
