@@ -797,9 +797,10 @@
     }
 
     const letter = entry.letter.toLowerCase();
-    const letterUrl = `audio/letters/${letter}.m4a?v=20260808e`;
-    const forUrl = `audio/words/for.m4a?v=20260808e`;
-    const wordUrl = `audio/words/${wordAudioKey(entry.word)}.m4a?v=20260808e`;
+    // Letters: clear WAV letter-names (bee/dee/…), not single-glyph m4a that muddled B/D
+    const letterUrl = `audio/letters/${letter}.wav?v=20260808f`;
+    const forUrl = `audio/words/for.m4a?v=20260808f`;
+    const wordUrl = `audio/words/${wordAudioKey(entry.word)}.m4a?v=20260808f`;
 
     if (phAnimTimer) clearTimeout(phAnimTimer);
     phAnimTimer = setTimeout(stopAnim, 16000);
