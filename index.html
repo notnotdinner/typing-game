@@ -58,7 +58,7 @@
       <div id="sky" class="sky" aria-hidden="true"></div>
       <div id="balloons" class="balloons" aria-live="polite"></div>
 
-      <!-- Phonics big card -->
+      <!-- Phonics big card (display only; keys are a sibling so iPad can tap them) -->
       <div id="phonics-panel" class="phonics-panel hidden" aria-live="polite">
         <div class="ph-emoji-wrap" id="ph-emoji-wrap">
           <span class="ph-emoji-ring" aria-hidden="true"></span>
@@ -70,8 +70,10 @@
         <div class="ph-letter" id="ph-letter">?</div>
         <div class="ph-phrase" id="ph-phrase">Press a letter A–Z</div>
         <div class="ph-word" id="ph-word">准备好听字母读音吧</div>
-        <div class="ph-keys" id="ph-keys" aria-hidden="true"></div>
       </div>
+
+      <!-- Letter strip: outside panel so touches work on iPad Safari -->
+      <div class="ph-keys hidden" id="ph-keys" role="group" aria-label="字母 A 到 Z"></div>
 
       <div class="typed-bar" id="typed-bar" aria-hidden="true">
         <span class="typed-label">刚按</span>

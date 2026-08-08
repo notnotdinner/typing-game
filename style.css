@@ -795,15 +795,11 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
-  padding: 24px 16px 70px;
+  padding: 18px 16px 150px;
   text-align: center;
   pointer-events: none;
-}
-
-.phonics-panel .ph-keys {
-  pointer-events: auto;
 }
 
 .phonics-panel.hidden {
@@ -1070,27 +1066,52 @@ body {
   }
 }
 
+/* Letter strip — own layer, always tappable on iPad */
 .ph-keys {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 8;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 5px;
-  margin-top: 14px;
-  max-width: 420px;
+  align-content: center;
+  gap: 8px;
+  width: min(720px, 96%);
+  max-width: 96%;
+  padding: 12px 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(30, 60, 90, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ph-keys.hidden {
+  display: none !important;
 }
 
 .ph-key {
   appearance: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 0.8rem;
+  -webkit-appearance: none;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: #fff;
+  border: 2px solid #c5d8ea;
+  color: #1a2a3a;
+  font-size: 1.25rem;
   font-weight: 800;
   font-family: inherit;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -1101,24 +1122,30 @@ body {
     color 0.12s ease;
   padding: 0;
   line-height: 1;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(91, 157, 255, 0.35);
+  /* iOS: ensure buttons receive taps */
+  position: relative;
+  z-index: 1;
 }
 
 .ph-key:hover {
-  transform: translateY(-2px) scale(1.08);
+  transform: translateY(-2px) scale(1.06);
   color: var(--text);
   border-color: #7eb6ff;
   box-shadow: 0 4px 12px rgba(91, 157, 255, 0.25);
 }
 
 .ph-key:active {
-  transform: scale(0.94);
+  transform: scale(0.92);
+  background: #e8f3ff;
 }
 
 .ph-key.heard {
   background: linear-gradient(180deg, #7ec8ff, #5b9dff);
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 2px 8px rgba(91, 157, 255, 0.35);
+  box-shadow: 0 3px 10px rgba(91, 157, 255, 0.4);
 }
 
 .ph-key.heard:hover {
@@ -1127,7 +1154,7 @@ body {
 }
 
 .ph-key:focus-visible {
-  outline: 2px solid var(--accent-2);
+  outline: 3px solid var(--accent-2);
   outline-offset: 2px;
 }
 
@@ -1135,8 +1162,40 @@ body {
   cursor: default;
 }
 
-.stage.phonics-mode .typed-bar .typed-label::after {
-  content: none;
+.stage.phonics-mode .typed-bar {
+  display: none !important;
+}
+
+@media (max-width: 560px) {
+  .ph-key {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.15rem;
+    border-radius: 11px;
+  }
+
+  .ph-keys {
+    gap: 7px;
+    padding: 10px 8px;
+    bottom: 8px;
+  }
+}
+
+@media (min-width: 768px) {
+  .ph-key {
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    font-size: 1.4rem;
+  }
+
+  .ph-keys {
+    gap: 10px;
+    bottom: 16px;
+  }
 }
 
 @media (max-width: 560px) {

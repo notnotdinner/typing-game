@@ -54,6 +54,7 @@
   const balloonsEl = document.getElementById("balloons");
   const skyEl = document.getElementById("sky");
   const typedEl = document.getElementById("typed");
+  const typedBar = document.getElementById("typed-bar");
   const overlay = document.getElementById("overlay");
   const overlayTitle = document.getElementById("overlay-title");
   const overlayMsg = document.getElementById("overlay-msg");
@@ -515,13 +516,15 @@
       btn.dataset.ch = ch;
       btn.textContent = ch.toUpperCase();
       btn.setAttribute("aria-label", `Letter ${ch.toUpperCase()}`);
-      btn.addEventListener("click", (e) => {
+      // pointerup works more reliably than click on iPad
+      const fire = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (state !== "phonics") return;
         onPhonicsLetter(ch);
-        focusStage();
-      });
+      };
+      btn.addEventListener("pointerup", fire);
+      btn.addEventListener("click", fire);
       phKeys.appendChild(btn);
     }
   }
@@ -705,22 +708,26 @@
     hudPhonics.classList.remove("hidden");
     phonicsPanel.classList.remove("hidden");
     balloonsEl.classList.add("hidden");
-    typedBarShow(true);
+    if (typedBar) typedBar.classList.add("hidden");
     stage.classList.add("phonics-mode");
     stage.setAttribute("aria-label", "读音模式");
 
     buildPhonicsKeyStrip();
+    phKeys.classList.remove("hidden");
     // reset heard styles
     phKeys.querySelectorAll(".ph-key").forEach((el) => el.classList.remove("heard"));
     phEmoji.textContent = "🔤";
     phLetter.textContent = "?";
     phPhrase.textContent = "Press a letter A–Z";
-    phWord.textContent = "按任意字母键开始听读音";
+    phWord.textContent = "点下面字母，或按键盘 A–Z";
     updatePhonicsHud();
     typedEl.textContent = "";
 
     hideOverlay();
-    focusStage();
+    // Don't steal focus away from buttons on iPad; stage focus is for BT keyboard
+    try {
+      stage.focus({ preventScroll: true });
+    } catch (_) {}
     // Unlock voices on user gesture (iPad)
     ensureVoice();
     if (window.speechSynthesis) {
@@ -742,19 +749,17 @@
     }
     stopEmojiSpeakAnim();
     phonicsPanel.classList.add("hidden");
+    if (phKeys) phKeys.classList.add("hidden");
     balloonsEl.classList.remove("hidden");
     hudPhonics.classList.add("hidden");
     hudGame.classList.remove("hidden");
+    if (typedBar) typedBar.classList.remove("hidden");
     stage.classList.remove("phonics-mode");
     stage.setAttribute("aria-label", "气球打字游戏区");
     if (footerHint) {
       footerHint.innerHTML =
         '专为 <strong>蓝牙 / 外接键盘</strong> 设计 · 一气球一字母 · 乱按会锁定输入 · <kbd>Esc</kbd> 暂停';
     }
-  }
-
-  function typedBarShow(_show) {
-    // typed bar always visible; no-op helper reserved
   }
 
   // --- Balloons: one letter each ---
@@ -1111,9 +1116,11 @@
     }
     stopEmojiSpeakAnim();
     if (phonicsPanel) phonicsPanel.classList.add("hidden");
+    if (phKeys) phKeys.classList.add("hidden");
     if (balloonsEl) balloonsEl.classList.remove("hidden");
     if (hudPhonics) hudPhonics.classList.add("hidden");
     if (hudGame) hudGame.classList.remove("hidden");
+    if (typedBar) typedBar.classList.remove("hidden");
     stage.classList.remove("phonics-mode");
   }
 
