@@ -771,6 +771,17 @@
       if (b.y > 100) loseLife(b);
     }
 
+    // Refresh lock countdown UI (~10fps is enough)
+    if (inputLockedUntil > 0) {
+      if (isInputLocked()) {
+        if ((ts / 100) | 0 !== ((ts - dt * 1000) / 100) | 0) updateHud();
+      } else {
+        inputLockedUntil = 0;
+        stage.classList.remove("input-locked");
+        updateHud();
+      }
+    }
+
     rafId = requestAnimationFrame(loop);
   }
 
