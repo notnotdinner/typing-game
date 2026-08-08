@@ -77,8 +77,10 @@
   const phEmojiWrap = document.getElementById("ph-emoji-wrap");
   const phEmoji = document.getElementById("ph-emoji");
   const phLetter = document.getElementById("ph-letter");
+  const phSpoken = document.getElementById("ph-spoken");
   const phPhrase = document.getElementById("ph-phrase");
   const phWord = document.getElementById("ph-word");
+  const phAudioStatus = document.getElementById("ph-audio-status");
   const phKeys = document.getElementById("ph-keys");
   const phCount = document.getElementById("ph-count");
   const phLast = document.getElementById("ph-last");
@@ -86,6 +88,7 @@
   let phAnimTimer = null;
   // Cycle cute motion styles while speaking
   const PH_ANIMS = ["bounce", "wiggle", "spin", "float", "heartbeat"];
+  const AUDIO_VER = "20260808g";
 
   // State
   let playMode = localStorage.getItem(STORAGE.playMode) || "game"; // game | phonics
@@ -519,19 +522,19 @@
       btn.dataset.ch = ch;
       btn.textContent = ch.toUpperCase();
       btn.setAttribute("aria-label", `Letter ${ch.toUpperCase()}`);
-      // pointerup is more reliable on iPad; guard against click double-fire
+      // Single handler: pointerup only (click double-fires on iPad and cuts audio)
       const fire = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (state !== "phonics") return;
         const now = performance.now();
-        if (lastPhTapCh === ch && now - lastPhTapAt < 320) return;
+        // longer debounce so full "bee" can finish starting
+        if (lastPhTapCh === ch && now - lastPhTapAt < 700) return;
         lastPhTapAt = now;
         lastPhTapCh = ch;
         onPhonicsLetter(ch);
       };
       btn.addEventListener("pointerup", fire);
-      btn.addEventListener("click", fire);
       phKeys.appendChild(btn);
     }
   }
@@ -714,8 +717,7 @@
     void phEmojiWrap.offsetWidth;
   }
 
-  // Pre-recorded US English audio (Kathy via macOS say) — reliable on Chinese iPad.
-  // speechSynthesis on zh-CN iOS often reads A as「啊」/「哎」; files fix that.
+  // Pre-recorded US English audio — not speechSynthesis (zh iPad mangles A/B).
   let phAudio = null;
   let phAudioToken = 0;
 
@@ -723,10 +725,27 @@
     return String(word).replace(/[ /]/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
   }
 
+  function audioUrl(relPath) {
+    // Absolute URL avoids wrong base path / cache weirdness on iPad
+    try {
+      return new URL(`${relPath}?v=${AUDIO_VER}`, window.location.href).href;
+    } catch (_) {
+      return `${relPath}?v=${AUDIO_VER}`;
+    }
+  }
+
+  function setPhStatus(msg, isErr) {
+    if (!phAudioStatus) return;
+    phAudioStatus.textContent = msg;
+    phAudioStatus.classList.toggle("err", !!isErr);
+  }
+
   function stopPhonicsAudio() {
     phAudioToken += 1;
     if (phAudio) {
       try {
+        phAudio.onended = null;
+        phAudio.onerror = null;
         phAudio.pause();
         phAudio.removeAttribute("src");
         phAudio.load();
@@ -736,48 +755,94 @@
     cancelSpeechQueue();
   }
 
-  function playAudioUrl(url) {
-    return new Promise((resolve) => {
-      const token = phAudioToken;
-      try {
-        const a = new Audio(url);
+  /**
+   * Play one audio file; try m4a then wav. Resolves {ok, url} .
+   * Waits for canplaythrough — iOS often fails if play() is too early.
+   */
+  function playAudioUrl(urls) {
+    const list = Array.isArray(urls) ? urls : [urls];
+    const token = phAudioToken;
+
+    function tryOne(idx) {
+      return new Promise((resolve) => {
+        if (token !== phAudioToken) {
+          resolve({ ok: false, url: null, reason: "cancelled" });
+          return;
+        }
+        if (idx >= list.length) {
+          resolve({ ok: false, url: null, reason: "all_failed" });
+          return;
+        }
+        const url = list[idx];
+        const a = new Audio();
         phAudio = a;
         a.preload = "auto";
-        const done = () => {
-          if (token !== phAudioToken) return;
-          resolve();
+        let settled = false;
+        const finish = (ok, reason) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(safety);
+          if (ok) resolve({ ok: true, url });
+          else tryOne(idx + 1).then(resolve);
         };
-        a.addEventListener("ended", done, { once: true });
-        a.addEventListener("error", done, { once: true });
-        // safety
-        const t = setTimeout(done, 8000);
+        const safety = setTimeout(() => finish(false, "timeout"), 6000);
         a.addEventListener(
-          "ended",
-          () => clearTimeout(t),
+          "error",
+          () => finish(false, "error"),
           { once: true }
         );
-        const p = a.play();
-        if (p && p.catch) p.catch(() => done());
-      } catch (_) {
-        resolve();
-      }
-    });
+        a.addEventListener(
+          "ended",
+          () => {
+            if (token !== phAudioToken) {
+              finish(false, "cancelled");
+              return;
+            }
+            settled = true;
+            clearTimeout(safety);
+            resolve({ ok: true, url });
+          },
+          { once: true }
+        );
+
+        let playStarted = false;
+        const startPlay = () => {
+          if (playStarted) return;
+          playStarted = true;
+          if (token !== phAudioToken) {
+            finish(false, "cancelled");
+            return;
+          }
+          const p = a.play();
+          if (p && p.catch) {
+            p.catch(() => finish(false, "play_reject"));
+          }
+        };
+
+        a.addEventListener("canplaythrough", startPlay, { once: true });
+        // some iOS only fire canplay
+        a.addEventListener("canplay", startPlay, { once: true });
+        a.src = url;
+        a.load();
+        // if already buffered
+        if (a.readyState >= 3) startPlay();
+      });
+    }
+
+    return tryOne(0);
   }
 
   function waitMs(ms) {
     return new Promise((resolve) => {
       const token = phAudioToken;
-      setTimeout(() => {
-        if (token === phAudioToken) resolve();
-        else resolve();
-      }, ms);
+      setTimeout(() => resolve(), ms);
     });
   }
 
   /**
-   * Kid speech: pre-recorded English letter name + "for" + word.
-   * A is true English letter A (/eɪ/), not Chinese 啊/哎.
-   * Sequence: letter → pause → letter → pause → for → pause → word
+   * Pre-recorded sequence:
+   *   bee (letter) → pause → bee → pause → for → pause → word
+   * On-screen shows spoken name so we can verify B≠D.
    */
   async function speakPhonics(entry) {
     if (!entry) return;
@@ -790,54 +855,58 @@
     stopEmojiSpeakAnim();
     startAnim();
 
+    const letter = entry.letter.toLowerCase();
+    const spoken =
+      (window.LETTER_NAMES && window.LETTER_NAMES[letter]) || letter;
+    if (phSpoken) phSpoken.textContent = `🔊 ${spoken}`;
+    setPhStatus(`播放字母 ${entry.letter} = ${spoken} · ${AUDIO_VER}`, false);
+
     if (!sfxOn) {
+      setPhStatus("音效已关闭（点右上角 🔊 打开）", true);
       if (phAnimTimer) clearTimeout(phAnimTimer);
       phAnimTimer = setTimeout(stopAnim, 900);
       return;
     }
 
-    const letter = entry.letter.toLowerCase();
-    // Letters: clear WAV letter-names (bee/dee/…), not single-glyph m4a that muddled B/D
-    const letterUrl = `audio/letters/${letter}.wav?v=20260808f`;
-    const forUrl = `audio/words/for.m4a?v=20260808f`;
-    const wordUrl = `audio/words/${wordAudioKey(entry.word)}.m4a?v=20260808f`;
+    // Prefer m4a (iOS-friendly), fallback wav
+    const letterUrls = [
+      audioUrl(`audio/letters/${letter}.m4a`),
+      audioUrl(`audio/letters/${letter}.wav`),
+    ];
+    const forUrls = [audioUrl("audio/words/for.m4a")];
+    const wordUrls = [audioUrl(`audio/words/${wordAudioKey(entry.word)}.m4a`)];
 
     if (phAnimTimer) clearTimeout(phAnimTimer);
-    phAnimTimer = setTimeout(stopAnim, 16000);
+    phAnimTimer = setTimeout(stopAnim, 18000);
 
-    try {
-      // Letter name twice, slowly spaced (kids need time)
-      await playAudioUrl(letterUrl);
-      if (token !== phAudioToken || state !== "phonics") return;
-      await waitMs(550);
-      if (token !== phAudioToken || state !== "phonics") return;
-
-      await playAudioUrl(letterUrl);
-      if (token !== phAudioToken || state !== "phonics") return;
-      await waitMs(700);
-      if (token !== phAudioToken || state !== "phonics") return;
-
-      await playAudioUrl(forUrl);
-      if (token !== phAudioToken || state !== "phonics") return;
-      await waitMs(450);
-      if (token !== phAudioToken || state !== "phonics") return;
-
-      await playAudioUrl(wordUrl);
-    } catch (_) {
-      // last resort: English TTS only, never Chinese letter text
-      if (window.speechSynthesis && token === phAudioToken) {
-        try {
-          const u = new SpeechSynthesisUtterance(
-            `${entry.letter} for ${entry.word}`
-          );
-          u.lang = "en-US";
-          u.rate = 0.45;
-          const v = ensureVoice("en-US");
-          if (v && !(v.lang || "").toLowerCase().startsWith("zh")) u.voice = v;
-          window.speechSynthesis.speak(u);
-        } catch (__) {}
-      }
+    // Letter twice
+    let r = await playAudioUrl(letterUrls);
+    if (token !== phAudioToken || state !== "phonics") return;
+    if (!r.ok) {
+      setPhStatus(`字母音频加载失败: ${letter}（请检查网络/刷新）`, true);
+      stopAnim();
+      return;
     }
+    setPhStatus(`✓ 正在播 ${spoken} · ${r.url.split("/").pop()}`, false);
+
+    await waitMs(600);
+    if (token !== phAudioToken || state !== "phonics") return;
+
+    r = await playAudioUrl(letterUrls);
+    if (token !== phAudioToken || state !== "phonics") return;
+    await waitMs(700);
+    if (token !== phAudioToken || state !== "phonics") return;
+
+    if (phSpoken) phSpoken.textContent = `🔊 for`;
+    r = await playAudioUrl(forUrls);
+    if (token !== phAudioToken || state !== "phonics") return;
+    await waitMs(500);
+    if (token !== phAudioToken || state !== "phonics") return;
+
+    if (phSpoken) phSpoken.textContent = `🔊 ${entry.word}`;
+    r = await playAudioUrl(wordUrls);
+    if (!r.ok) setPhStatus(`单词音频失败: ${entry.word}`, true);
+    else setPhStatus(`完成 · ${entry.letter} = ${spoken} · for ${entry.word}`, false);
 
     if (token === phAudioToken) {
       if (phAnimTimer) {
@@ -852,6 +921,11 @@
     if (!entry) return;
     phEmoji.textContent = entry.emoji;
     phLetter.textContent = entry.letter;
+    const spoken =
+      (window.LETTER_NAMES &&
+        window.LETTER_NAMES[entry.letter.toLowerCase()]) ||
+      entry.letter;
+    if (phSpoken) phSpoken.textContent = `🔊 ${spoken}`;
     phPhrase.textContent = entry.phrase;
     phWord.textContent = entry.word;
     phonicsPanel.classList.remove("pop");

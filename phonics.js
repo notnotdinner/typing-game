@@ -168,34 +168,44 @@ window.PHONICS_BANK = {
  * - A → "ay" (ei), never bare "a" which some engines shorten
  * - Others: "bee", "see", "dee"… classic letter-name spellings
  */
-window.PHONICS_SOUNDS = {
-  a: { lang: "en-US", text: "ay", repeat: 2 }, // /eɪ/ 「ei」
-  b: { lang: "en-US", text: "bee", repeat: 2 },
-  c: { lang: "en-US", text: "see", repeat: 2 },
-  d: { lang: "en-US", text: "dee", repeat: 2 },
-  e: { lang: "en-US", text: "ee", repeat: 2 },
-  f: { lang: "en-US", text: "eff", repeat: 2 },
-  g: { lang: "en-US", text: "jee", repeat: 2 },
-  h: { lang: "en-US", text: "aych", repeat: 2 },
-  i: { lang: "en-US", text: "eye", repeat: 2 },
-  j: { lang: "en-US", text: "jay", repeat: 2 },
-  k: { lang: "en-US", text: "kay", repeat: 2 },
-  l: { lang: "en-US", text: "ell", repeat: 2 },
-  m: { lang: "en-US", text: "em", repeat: 2 },
-  n: { lang: "en-US", text: "en", repeat: 2 },
-  o: { lang: "en-US", text: "oh", repeat: 2 },
-  p: { lang: "en-US", text: "pee", repeat: 2 },
-  q: { lang: "en-US", text: "cue", repeat: 2 },
-  r: { lang: "en-US", text: "ar", repeat: 2 },
-  s: { lang: "en-US", text: "ess", repeat: 2 },
-  t: { lang: "en-US", text: "tee", repeat: 2 },
-  u: { lang: "en-US", text: "you", repeat: 2 },
-  v: { lang: "en-US", text: "vee", repeat: 2 },
-  w: { lang: "en-US", text: "double you", repeat: 1 },
-  x: { lang: "en-US", text: "ex", repeat: 2 },
-  y: { lang: "en-US", text: "why", repeat: 2 },
-  z: { lang: "en-US", text: "zee", repeat: 2 },
+// Spoken letter-name shown on screen + used for audio file content
+// B = "bee" (not D). D = "dee". A = "ay" (ei).
+window.LETTER_NAMES = {
+  a: "ay",
+  b: "bee",
+  c: "see",
+  d: "dee",
+  e: "ee",
+  f: "eff",
+  g: "jee",
+  h: "aitch",
+  i: "eye",
+  j: "jay",
+  k: "kay",
+  l: "ell",
+  m: "em",
+  n: "en",
+  o: "oh",
+  p: "pee",
+  q: "cue",
+  r: "ar",
+  s: "ess",
+  t: "tee",
+  u: "you",
+  v: "vee",
+  w: "double-u",
+  x: "ex",
+  y: "why",
+  z: "zee",
 };
+
+// Legacy alias
+window.PHONICS_SOUNDS = Object.fromEntries(
+  Object.entries(window.LETTER_NAMES).map(([k, text]) => [
+    k,
+    { lang: "en-US", text, repeat: 2 },
+  ])
+);
 
 // Avoid showing the exact same word twice in a row for a letter
 const _lastWord = Object.create(null);
