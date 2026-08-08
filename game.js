@@ -73,6 +73,7 @@
   const gameSettings = document.getElementById("game-settings");
   const phonicsHint = document.getElementById("phonics-hint");
   const phonicsPanel = document.getElementById("phonics-panel");
+  const phEmojiWrap = document.getElementById("ph-emoji-wrap");
   const phEmoji = document.getElementById("ph-emoji");
   const phLetter = document.getElementById("ph-letter");
   const phPhrase = document.getElementById("ph-phrase");
@@ -81,6 +82,9 @@
   const phCount = document.getElementById("ph-count");
   const phLast = document.getElementById("ph-last");
   const footerHint = document.getElementById("footer-hint");
+  let phAnimTimer = null;
+  // Cycle cute motion styles while speaking
+  const PH_ANIMS = ["bounce", "wiggle", "spin", "float", "heartbeat"];
 
   // State
   let playMode = localStorage.getItem(STORAGE.playMode) || "game"; // game | phonics
@@ -569,17 +573,60 @@
     } catch (_) {}
   }
 
+  function stopEmojiSpeakAnim() {
+    if (phAnimTimer) {
+      clearTimeout(phAnimTimer);
+      phAnimTimer = null;
+    }
+    if (phEmojiWrap) {
+      phEmojiWrap.classList.remove("speaking");
+      PH_ANIMS.forEach((a) => phEmojiWrap.classList.remove(`anim-${a}`));
+    }
+    if (phEmoji) phEmoji.classList.remove("speaking");
+    if (phonicsPanel) phonicsPanel.classList.remove("speaking-active");
+  }
+
+  function startEmojiSpeakAnim(letter) {
+    if (!phEmojiWrap || !phEmoji) return;
+    stopEmojiSpeakAnim();
+    // pick animation style from letter for variety
+    const idx = (letter.charCodeAt(0) - 97) % PH_ANIMS.length;
+    const style = PH_ANIMS[idx];
+    phEmojiWrap.classList.add("speaking", `anim-${style}`);
+    phEmoji.classList.add("speaking");
+    if (phonicsPanel) phonicsPanel.classList.add("speaking-active");
+    // reflow so CSS animation restarts cleanly
+    void phEmojiWrap.offsetWidth;
+  }
+
   function speakPhonics(entry) {
     if (!entry) return;
-    if (!sfxOn) return; // respect mute as "voice off"
-    if (!window.speechSynthesis) {
-      // fallback soft beep if no TTS
-      tone(523.25, 0.1, "sine", 0.08);
-      tone(659.25, 0.12, "sine", 0.07, 0.1);
+
+    const startAnim = () => startEmojiSpeakAnim(entry.letter.toLowerCase());
+    const stopAnim = () => stopEmojiSpeakAnim();
+
+    // Always animate the icon; duration falls back if TTS unavailable
+    const approxMs = Math.max(1600, entry.phrase.length * 110);
+
+    if (!sfxOn) {
+      // muted: still show icon dance briefly
+      startAnim();
+      phAnimTimer = setTimeout(stopAnim, 900);
       return;
     }
+
+    if (!window.speechSynthesis) {
+      tone(523.25, 0.1, "sine", 0.08);
+      tone(659.25, 0.12, "sine", 0.07, 0.1);
+      startAnim();
+      phAnimTimer = setTimeout(stopAnim, approxMs);
+      return;
+    }
+
     try {
       window.speechSynthesis.cancel();
+      stopEmojiSpeakAnim();
+
       const u = new SpeechSynthesisUtterance(entry.phrase);
       u.lang = "en-US";
       u.rate = 0.9;
@@ -587,9 +634,20 @@
       u.volume = 1;
       const voice = ensureVoice();
       if (voice) u.voice = voice;
+
+      u.onstart = () => startAnim();
+      u.onend = () => stopAnim();
+      u.onerror = () => stopAnim();
+
+      // Safety: some browsers fire onstart late or not at all
+      startAnim();
+      phAnimTimer = setTimeout(stopAnim, approxMs + 800);
+
       window.speechSynthesis.speak(u);
     } catch (_) {
       tone(523.25, 0.1, "sine", 0.08);
+      startAnim();
+      phAnimTimer = setTimeout(stopAnim, approxMs);
     }
   }
 
@@ -673,6 +731,7 @@
         window.speechSynthesis.cancel();
       } catch (_) {}
     }
+    stopEmojiSpeakAnim();
     phonicsPanel.classList.add("hidden");
     balloonsEl.classList.remove("hidden");
     hudPhonics.classList.add("hidden");
@@ -1041,6 +1100,7 @@
         window.speechSynthesis.cancel();
       } catch (_) {}
     }
+    stopEmojiSpeakAnim();
     if (phonicsPanel) phonicsPanel.classList.add("hidden");
     if (balloonsEl) balloonsEl.classList.remove("hidden");
     if (hudPhonics) hudPhonics.classList.add("hidden");
