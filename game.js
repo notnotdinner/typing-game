@@ -714,94 +714,137 @@
     void phEmojiWrap.offsetWidth;
   }
 
+  // Pre-recorded US English audio (Kathy via macOS say) — reliable on Chinese iPad.
+  // speechSynthesis on zh-CN iOS often reads A as「啊」/「哎」; files fix that.
+  let phAudio = null;
+  let phAudioToken = 0;
+
+  function wordAudioKey(word) {
+    return String(word).replace(/[ /]/g, "_").replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+
+  function stopPhonicsAudio() {
+    phAudioToken += 1;
+    if (phAudio) {
+      try {
+        phAudio.pause();
+        phAudio.removeAttribute("src");
+        phAudio.load();
+      } catch (_) {}
+      phAudio = null;
+    }
+    cancelSpeechQueue();
+  }
+
+  function playAudioUrl(url) {
+    return new Promise((resolve) => {
+      const token = phAudioToken;
+      try {
+        const a = new Audio(url);
+        phAudio = a;
+        a.preload = "auto";
+        const done = () => {
+          if (token !== phAudioToken) return;
+          resolve();
+        };
+        a.addEventListener("ended", done, { once: true });
+        a.addEventListener("error", done, { once: true });
+        // safety
+        const t = setTimeout(done, 8000);
+        a.addEventListener(
+          "ended",
+          () => clearTimeout(t),
+          { once: true }
+        );
+        const p = a.play();
+        if (p && p.catch) p.catch(() => done());
+      } catch (_) {
+        resolve();
+      }
+    });
+  }
+
+  function waitMs(ms) {
+    return new Promise((resolve) => {
+      const token = phAudioToken;
+      setTimeout(() => {
+        if (token === phAudioToken) resolve();
+        else resolve();
+      }, ms);
+    });
+  }
+
   /**
-   * Kid speech (iPad-safe):
-   * 1) Letter NAME in English (A → "ay"/ei, B → "bee", …)
-   * 2) Long pause (iOS ignores rate — slow with gaps)
-   * 3) "for" + word, slowly
+   * Kid speech: pre-recorded English letter name + "for" + word.
+   * A is true English letter A (/eɪ/), not Chinese 啊/哎.
+   * Sequence: letter → pause → letter → pause → for → pause → word
    */
-  function speakPhonics(entry) {
+  async function speakPhonics(entry) {
     if (!entry) return;
 
     const startAnim = () => startEmojiSpeakAnim(entry.letter.toLowerCase());
     const stopAnim = () => stopEmojiSpeakAnim();
 
+    stopPhonicsAudio();
+    const token = phAudioToken;
+    stopEmojiSpeakAnim();
+    startAnim();
+
     if (!sfxOn) {
-      startAnim();
       if (phAnimTimer) clearTimeout(phAnimTimer);
       phAnimTimer = setTimeout(stopAnim, 900);
       return;
     }
 
-    if (!window.speechSynthesis) {
-      tone(523.25, 0.12, "sine", 0.08);
-      tone(659.25, 0.14, "sine", 0.07, 0.14);
-      startAnim();
-      if (phAnimTimer) clearTimeout(phAnimTimer);
-      phAnimTimer = setTimeout(stopAnim, 2000);
-      return;
-    }
-
-    cancelSpeechQueue();
-    stopEmojiSpeakAnim();
-    startAnim();
-
-    // Letter NAMES in English only. A = "ay" (/eɪ/ ei). Never Chinese「啊」.
-    let soundText = "ay";
-    let soundLang = "en-US";
-    let repeat = 2;
-    if (entry.sound) {
-      if (typeof entry.sound === "string") {
-        soundText = entry.sound;
-      } else {
-        soundText = entry.sound.text || soundText;
-        soundLang = entry.sound.lang || "en-US";
-        repeat = entry.sound.repeat != null ? entry.sound.repeat : 2;
-      }
-    }
-    // Hard lock: never speak Chinese for letter names (fixes stale/wrong data)
-    if (/[\u4e00-\u9fff]/.test(soundText) || (soundLang && soundLang.toLowerCase().startsWith("zh"))) {
-      soundText = entry.letter === "A" ? "ay" : entry.letter;
-      soundLang = "en-US";
-    }
-    // A must be letter-name "ay" (ei), not short "a"
-    if (entry.letter === "A") {
-      soundText = "ay";
-      soundLang = "en-US";
-    }
-
-    // ay … ay … (gap) for (gap) apple
-    const steps = [];
-    for (let r = 0; r < repeat; r++) {
-      steps.push({
-        text: soundText,
-        lang: "en-US", // force English voice path
-        rate: 0.4,
-        gapAfterMs: 900,
-      });
-    }
-    steps.push({ text: "", gapAfterMs: 500 });
-    steps.push({ text: "for", lang: "en-US", rate: 0.4, gapAfterMs: 750 });
-    const wordBits = String(entry.word).split(/\s+/);
-    wordBits.forEach((bit, idx) => {
-      steps.push({
-        text: bit,
-        lang: "en-US",
-        rate: 0.4,
-        gapAfterMs: idx === wordBits.length - 1 ? 400 : 550,
-      });
-    });
+    const letter = entry.letter.toLowerCase();
+    const letterUrl = `audio/letters/${letter}.m4a?v=20260808e`;
+    const forUrl = `audio/words/for.m4a?v=20260808e`;
+    const wordUrl = `audio/words/${wordAudioKey(entry.word)}.m4a?v=20260808e`;
 
     if (phAnimTimer) clearTimeout(phAnimTimer);
-    phAnimTimer = setTimeout(stopAnim, 14000);
+    phAnimTimer = setTimeout(stopAnim, 16000);
 
-    speakSequence(steps, () => {
+    try {
+      // Letter name twice, slowly spaced (kids need time)
+      await playAudioUrl(letterUrl);
+      if (token !== phAudioToken || state !== "phonics") return;
+      await waitMs(550);
+      if (token !== phAudioToken || state !== "phonics") return;
+
+      await playAudioUrl(letterUrl);
+      if (token !== phAudioToken || state !== "phonics") return;
+      await waitMs(700);
+      if (token !== phAudioToken || state !== "phonics") return;
+
+      await playAudioUrl(forUrl);
+      if (token !== phAudioToken || state !== "phonics") return;
+      await waitMs(450);
+      if (token !== phAudioToken || state !== "phonics") return;
+
+      await playAudioUrl(wordUrl);
+    } catch (_) {
+      // last resort: English TTS only, never Chinese letter text
+      if (window.speechSynthesis && token === phAudioToken) {
+        try {
+          const u = new SpeechSynthesisUtterance(
+            `${entry.letter} for ${entry.word}`
+          );
+          u.lang = "en-US";
+          u.rate = 0.45;
+          const v = ensureVoice("en-US");
+          if (v && !(v.lang || "").toLowerCase().startsWith("zh")) u.voice = v;
+          window.speechSynthesis.speak(u);
+        } catch (__) {}
+      }
+    }
+
+    if (token === phAudioToken) {
       if (phAnimTimer) {
         clearTimeout(phAnimTimer);
         phAnimTimer = null;
       }
       stopAnim();
-    });
+    }
   }
 
   function showPhonicsCard(entry) {
@@ -883,7 +926,7 @@
   }
 
   function stopPhonics() {
-    cancelSpeechQueue();
+    stopPhonicsAudio();
     stopEmojiSpeakAnim();
     phonicsPanel.classList.add("hidden");
     if (phKeys) phKeys.classList.add("hidden");
@@ -1246,7 +1289,7 @@
 
   /** Reset phonics DOM without changing menu state text */
   function stopPhonicsUiOnly() {
-    cancelSpeechQueue();
+    stopPhonicsAudio();
     stopEmojiSpeakAnim();
     if (phonicsPanel) phonicsPanel.classList.add("hidden");
     if (phKeys) phKeys.classList.add("hidden");
