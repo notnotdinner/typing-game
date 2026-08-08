@@ -619,8 +619,9 @@
   }
 
   /**
-   * Kid-friendly speech: slow rate, clear pauses.
-   * Speaks as: "A" → pause → "for apple" (letter first, then word).
+   * Kid-friendly speech: very slow, letter SOUND (not letter name) then word.
+   * Never speak bare "A" — English TTS says /eɪ/ ("ei"); we use phonics cues
+   * e.g. A → "aaaah" ≈ short a / 啊.
    */
   function speakPhonics(entry) {
     if (!entry) return;
@@ -628,8 +629,8 @@
     const startAnim = () => startEmojiSpeakAnim(entry.letter.toLowerCase());
     const stopAnim = () => stopEmojiSpeakAnim();
 
-    // Slow speech runs longer — keep emoji anim for full duration
-    const approxMs = Math.max(4200, 1800 + entry.word.length * 220);
+    // Longer window for slow 3-part speech
+    const approxMs = Math.max(6500, 2800 + entry.word.length * 280);
 
     if (!sfxOn) {
       startAnim();
@@ -650,50 +651,60 @@
       stopEmojiSpeakAnim();
 
       const voice = ensureVoice();
-      // Rate ~0.55–0.65 is slow enough for kids; pitch near 1 for clarity
-      const kidRate = 0.58;
-      const kidPitch = 1.0;
+      // Very slow for young children (Web Speech: 0.1–10, 1 = normal)
+      const soundRate = 0.42;
+      const wordRate = 0.48;
+      const kidPitch = 0.95;
 
-      function makeUtterance(text) {
+      function makeUtterance(text, rate) {
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "en-US";
-        u.rate = kidRate;
+        u.rate = rate;
         u.pitch = kidPitch;
         u.volume = 1;
         if (voice) u.voice = voice;
         return u;
       }
 
-      // Part 1: letter name alone (clear bite)
-      // Use spelled form so engines say "A" / "B" not "ay" weirdly on some voices
-      const letterPart = makeUtterance(entry.letter);
-      // Part 2: "for apple" — periods force small pauses for clearer syllables
-      const wordPart = makeUtterance(`for. ${entry.word}.`);
+      function speakNext(utt) {
+        if (state !== "phonics") {
+          stopAnim();
+          return;
+        }
+        try {
+          window.speechSynthesis.speak(utt);
+        } catch (_) {
+          stopAnim();
+        }
+      }
 
-      letterPart.onstart = () => startAnim();
-      letterPart.onerror = () => stopAnim();
+      // Phonics sound cue (NOT the letter name "A"/"B"/…)
+      const soundText = entry.sound || "ah";
+      // Elongate for A-like vowels so kids hear a clear "ah / a"
+      const soundPart = makeUtterance(soundText, soundRate);
+      // Then slowly: "for" … word (commas = pauses)
+      const forPart = makeUtterance("for", wordRate);
+      const wordPart = makeUtterance(`${entry.word}.`, wordRate);
+
+      soundPart.onstart = () => startAnim();
+      soundPart.onerror = () => stopAnim();
+      forPart.onerror = () => stopAnim();
       wordPart.onend = () => stopAnim();
       wordPart.onerror = () => stopAnim();
 
-      // Chain: letter → short gap → "for word"
-      letterPart.onend = () => {
-        // Extra silence between letter and word (~0.45s) for kids to process
+      // sound → long pause → "for" → pause → word
+      soundPart.onend = () => {
         setTimeout(() => {
-          if (state !== "phonics") {
-            stopAnim();
-            return;
-          }
-          try {
-            window.speechSynthesis.speak(wordPart);
-          } catch (_) {
-            stopAnim();
-          }
-        }, 450);
+          forPart.onend = () => {
+            setTimeout(() => speakNext(wordPart), 350);
+          };
+          speakNext(forPart);
+        }, 700);
       };
 
       startAnim();
-      phAnimTimer = setTimeout(stopAnim, approxMs + 1200);
-      window.speechSynthesis.speak(letterPart);
+      phAnimTimer = setTimeout(stopAnim, approxMs + 1500);
+      speakNext(soundPart);
     } catch (_) {
       tone(523.25, 0.12, "sine", 0.08);
       startAnim();

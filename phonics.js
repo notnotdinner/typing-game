@@ -160,12 +160,47 @@ window.PHONICS_BANK = {
   ],
 };
 
+/**
+ * How TTS should pronounce each letter SOUND (not the letter name).
+ * English engines say "A" as /eɪ/ ("ei") — we never pass bare "A"/"a".
+ * Spellings are chosen so en-US voices produce short/phonics sounds for kids.
+ */
+window.PHONICS_SOUNDS = {
+  // A: short /æ~ɑ/ like 啊 / apple — NOT "ay/ei"
+  a: "aaaah",
+  b: "buh",
+  c: "kuh",
+  d: "duh",
+  e: "ehh",
+  f: "fff",
+  g: "guh",
+  h: "huh",
+  i: "ihh",
+  j: "juh",
+  k: "kuh",
+  l: "lll",
+  m: "mmm",
+  n: "nnn",
+  o: "ooo",
+  p: "puh",
+  q: "kwuh",
+  r: "rrr",
+  s: "sss",
+  t: "tuh",
+  u: "uhh",
+  v: "vvv",
+  w: "wuh",
+  x: "ks",
+  y: "yuh",
+  z: "zzz",
+};
+
 // Avoid showing the exact same word twice in a row for a letter
 const _lastWord = Object.create(null);
 
 /**
  * Pick a random phonics card for a letter.
- * @returns {{ letter, word, emoji, phrase } | null}
+ * @returns {{ letter, word, emoji, phrase, sound } | null}
  */
 window.getPhonics = function getPhonics(ch) {
   if (!ch) return null;
@@ -187,11 +222,13 @@ window.getPhonics = function getPhonics(ch) {
   _lastWord[key] = pick.word;
 
   const letter = key.toUpperCase();
+  const sound = window.PHONICS_SOUNDS[key] || key;
   return {
     letter,
     word: pick.word,
     emoji: pick.emoji,
     phrase: `${letter} for ${pick.word}`,
+    sound,
   };
 };
 
