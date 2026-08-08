@@ -505,6 +505,9 @@
     }
   }
 
+  let lastPhTapAt = 0;
+  let lastPhTapCh = "";
+
   function buildPhonicsKeyStrip() {
     if (!phKeys) return;
     phKeys.innerHTML = "";
@@ -516,11 +519,15 @@
       btn.dataset.ch = ch;
       btn.textContent = ch.toUpperCase();
       btn.setAttribute("aria-label", `Letter ${ch.toUpperCase()}`);
-      // pointerup works more reliably than click on iPad
+      // pointerup is more reliable on iPad; guard against click double-fire
       const fire = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (state !== "phonics") return;
+        const now = performance.now();
+        if (lastPhTapCh === ch && now - lastPhTapAt < 320) return;
+        lastPhTapAt = now;
+        lastPhTapCh = ch;
         onPhonicsLetter(ch);
       };
       btn.addEventListener("pointerup", fire);
