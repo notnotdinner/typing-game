@@ -802,6 +802,10 @@ body {
   pointer-events: none;
 }
 
+.phonics-panel .ph-keys {
+  pointer-events: auto;
+}
+
 .phonics-panel.hidden {
   display: none !important;
 }
@@ -1076,17 +1080,38 @@ body {
 }
 
 .ph-key {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.7);
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--border);
   color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-family: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    color 0.12s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.ph-key:hover {
+  transform: translateY(-2px) scale(1.08);
+  color: var(--text);
+  border-color: #7eb6ff;
+  box-shadow: 0 4px 12px rgba(91, 157, 255, 0.25);
+}
+
+.ph-key:active {
+  transform: scale(0.94);
 }
 
 .ph-key.heard {
@@ -1094,6 +1119,16 @@ body {
   border-color: transparent;
   color: #fff;
   box-shadow: 0 2px 8px rgba(91, 157, 255, 0.35);
+}
+
+.ph-key.heard:hover {
+  filter: brightness(1.06);
+  color: #fff;
+}
+
+.ph-key:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
 }
 
 .stage.phonics-mode {

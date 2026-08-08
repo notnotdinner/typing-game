@@ -509,11 +509,20 @@
     phKeys.innerHTML = "";
     for (let i = 0; i < 26; i++) {
       const ch = String.fromCharCode(97 + i);
-      const span = document.createElement("span");
-      span.className = "ph-key";
-      span.dataset.ch = ch;
-      span.textContent = ch.toUpperCase();
-      phKeys.appendChild(span);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ph-key";
+      btn.dataset.ch = ch;
+      btn.textContent = ch.toUpperCase();
+      btn.setAttribute("aria-label", `Letter ${ch.toUpperCase()}`);
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (state !== "phonics") return;
+        onPhonicsLetter(ch);
+        focusStage();
+      });
+      phKeys.appendChild(btn);
     }
   }
 
