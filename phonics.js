@@ -161,41 +161,40 @@ window.PHONICS_BANK = {
 };
 
 /**
- * How to SPEAK each letter sound for kids.
- * Never use bare English "A"/"B" — iOS says letter NAMES (A→ei).
+ * How to SPEAK each letter NAME for kids (A B C…, not short phonemes).
+ * A must be English "ay/ei" (/eɪ/), NOT short "a" / Chinese「啊」.
  *
- * Prefer zh-CN syllables for pure vowel/consonant sounds so Chinese iPads
- * pronounce them correctly and slowly; English word is spoken separately.
- * text may be spoken 2–3 times slowly for emphasis.
+ * Spelling tricks force en-US TTS to say the letter name clearly & slowly:
+ * - A → "ay" (ei), never bare "a" which some engines shorten
+ * - Others: "bee", "see", "dee"… classic letter-name spellings
  */
 window.PHONICS_SOUNDS = {
-  // A must be 啊 (a), NEVER English letter "A" (ei)
-  a: { lang: "zh-CN", text: "啊", repeat: 2 },
-  b: { lang: "zh-CN", text: "波", repeat: 2 },
-  c: { lang: "zh-CN", text: "克", repeat: 2 },
-  d: { lang: "zh-CN", text: "得", repeat: 2 },
-  e: { lang: "zh-CN", text: "鹅", repeat: 2 },
-  f: { lang: "zh-CN", text: "夫", repeat: 2 },
-  g: { lang: "zh-CN", text: "哥", repeat: 2 },
-  h: { lang: "zh-CN", text: "喝", repeat: 2 },
-  i: { lang: "zh-CN", text: "衣", repeat: 2 },
-  j: { lang: "zh-CN", text: "街", repeat: 2 },
-  k: { lang: "zh-CN", text: "科", repeat: 2 },
-  l: { lang: "zh-CN", text: "勒", repeat: 2 },
-  m: { lang: "zh-CN", text: "摸", repeat: 2 },
-  n: { lang: "zh-CN", text: "呢", repeat: 2 },
-  o: { lang: "zh-CN", text: "哦", repeat: 2 },
-  p: { lang: "zh-CN", text: "泼", repeat: 2 },
-  q: { lang: "zh-CN", text: "酷", repeat: 2 },
-  r: { lang: "zh-CN", text: "日", repeat: 2 },
-  s: { lang: "zh-CN", text: "丝", repeat: 2 },
-  t: { lang: "zh-CN", text: "特", repeat: 2 },
-  u: { lang: "zh-CN", text: "乌", repeat: 2 },
-  v: { lang: "zh-CN", text: "维", repeat: 2 },
-  w: { lang: "zh-CN", text: "我", repeat: 2 },
-  x: { lang: "zh-CN", text: "克斯", repeat: 1 },
-  y: { lang: "zh-CN", text: "呀", repeat: 2 },
-  z: { lang: "zh-CN", text: "兹", repeat: 2 },
+  a: { lang: "en-US", text: "ay", repeat: 2 }, // /eɪ/ 「ei」
+  b: { lang: "en-US", text: "bee", repeat: 2 },
+  c: { lang: "en-US", text: "see", repeat: 2 },
+  d: { lang: "en-US", text: "dee", repeat: 2 },
+  e: { lang: "en-US", text: "ee", repeat: 2 },
+  f: { lang: "en-US", text: "eff", repeat: 2 },
+  g: { lang: "en-US", text: "jee", repeat: 2 },
+  h: { lang: "en-US", text: "aych", repeat: 2 },
+  i: { lang: "en-US", text: "eye", repeat: 2 },
+  j: { lang: "en-US", text: "jay", repeat: 2 },
+  k: { lang: "en-US", text: "kay", repeat: 2 },
+  l: { lang: "en-US", text: "ell", repeat: 2 },
+  m: { lang: "en-US", text: "em", repeat: 2 },
+  n: { lang: "en-US", text: "en", repeat: 2 },
+  o: { lang: "en-US", text: "oh", repeat: 2 },
+  p: { lang: "en-US", text: "pee", repeat: 2 },
+  q: { lang: "en-US", text: "cue", repeat: 2 },
+  r: { lang: "en-US", text: "ar", repeat: 2 },
+  s: { lang: "en-US", text: "ess", repeat: 2 },
+  t: { lang: "en-US", text: "tee", repeat: 2 },
+  u: { lang: "en-US", text: "you", repeat: 2 },
+  v: { lang: "en-US", text: "vee", repeat: 2 },
+  w: { lang: "en-US", text: "double you", repeat: 1 },
+  x: { lang: "en-US", text: "ex", repeat: 2 },
+  y: { lang: "en-US", text: "why", repeat: 2 },
+  z: { lang: "en-US", text: "zee", repeat: 2 },
 };
 
 // Avoid showing the exact same word twice in a row for a letter
@@ -226,7 +225,7 @@ window.getPhonics = function getPhonics(ch) {
 
   const letter = key.toUpperCase();
   const sound =
-    window.PHONICS_SOUNDS[key] || { lang: "zh-CN", text: "啊", repeat: 1 };
+    window.PHONICS_SOUNDS[key] || { lang: "en-US", text: "ay", repeat: 2 };
   return {
     letter,
     word: pick.word,

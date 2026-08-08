@@ -716,9 +716,9 @@
 
   /**
    * Kid speech (iPad-safe):
-   * 1) Letter SOUND in Chinese (A →「啊」not English "A"/ei)
-   * 2) Long pause (iOS ignores rate — we slow with gaps)
-   * 3) English "for" + word, spoken slowly with gaps
+   * 1) Letter NAME in English (A → "ay"/ei, B → "bee", …)
+   * 2) Long pause (iOS ignores rate — slow with gaps)
+   * 3) "for" + word, slowly
    */
   function speakPhonics(entry) {
     if (!entry) return;
@@ -746,37 +746,35 @@
     stopEmojiSpeakAnim();
     startAnim();
 
-    const sound = entry.sound || { lang: "zh-CN", text: "啊", repeat: 2 };
+    // Default A = "ay" (ei), never short "a" / 啊
+    const sound = entry.sound || { lang: "en-US", text: "ay", repeat: 2 };
     const soundText = typeof sound === "string" ? sound : sound.text;
-    const soundLang = typeof sound === "string" ? "zh-CN" : sound.lang || "zh-CN";
+    const soundLang = typeof sound === "string" ? "en-US" : sound.lang || "en-US";
     const repeat = typeof sound === "string" ? 2 : sound.repeat || 2;
 
-    // Build slow sequence: 啊 … 啊 …  (gap)  for  (gap)  ap-ple
+    // ay … ay … (gap) for (gap) apple
     const steps = [];
     for (let r = 0; r < repeat; r++) {
       steps.push({
         text: soundText,
         lang: soundLang,
-        rate: 0.35,
-        gapAfterMs: 850, // long pause — this is what actually slows iPad speech
+        rate: 0.4,
+        gapAfterMs: 900,
       });
     }
-    // extra silence before English
     steps.push({ text: "", gapAfterMs: 500 });
     steps.push({ text: "for", lang: "en-US", rate: 0.4, gapAfterMs: 750 });
-    // Speak English word slowly; split multi-word like "ice cream"
     const wordBits = String(entry.word).split(/\s+/);
     wordBits.forEach((bit, idx) => {
       steps.push({
         text: bit,
         lang: "en-US",
-        rate: 0.38,
+        rate: 0.4,
         gapAfterMs: idx === wordBits.length - 1 ? 400 : 550,
       });
     });
 
     if (phAnimTimer) clearTimeout(phAnimTimer);
-    // Failsafe stop anim
     phAnimTimer = setTimeout(stopAnim, 14000);
 
     speakSequence(steps, () => {
