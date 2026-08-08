@@ -88,7 +88,8 @@
   let phAnimTimer = null;
   // Cycle cute motion styles while speaking
   const PH_ANIMS = ["bounce", "wiggle", "spin", "float", "heartbeat"];
-  const AUDIO_VER = "20260808g";
+  // Set by boot.js from version.json (git sha). Fallback only for file:// dev.
+  const AUDIO_VER = window.__BUILD__ || "dev";
 
   // State
   let playMode = localStorage.getItem(STORAGE.playMode) || "game"; // game | phonics

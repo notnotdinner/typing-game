@@ -8,6 +8,37 @@
 
 **https://notnotdinner.github.io/typing-game/**
 
+## 如何彻底避免缓存旧版（iPad / Safari）
+
+GitHub Pages 会对静态文件做约 **10 分钟** 的 CDN 缓存；iPad Safari 也会强缓存 JS。本项目用下面机制自动绕过：
+
+| 机制 | 作用 |
+|------|------|
+| **`boot.js` 动态加载** | 每次打开用 `Date.now()` 拉 `boot.js`，旧 HTML 也能换新加载器 |
+| **`version.json?_=随机数`** | 每次访问强制拉最新版本号（绕过 CDN 同名缓存） |
+| **资源 `?v=<git-sha>`** | `style.css` / `game.js` / 音频都带版本参数，一发版就换 URL |
+| **清 SW + Cache API** | 进入时注销 Service Worker、删掉 Cache Storage |
+
+页脚会显示 **`build <版本号>`**。发版后若与 GitHub 最新 commit 一致，就是新版。
+
+### 开发者发版流程
+
+```bash
+# 改完代码后、push 前：
+./scripts/stamp-version.sh
+git add -A && git commit -m "..." && git push
+# 若希望 version.json 的 v 等于本次 commit：
+./scripts/stamp-version.sh && git add version.json && git commit -m "chore: stamp version" && git push
+```
+
+### 用户仍看到旧版时（一次性）
+
+1. Safari **无痕**打开站点  
+2. 或：设置 → Safari → **清除历史记录与网站数据**  
+3. 删掉主屏幕旧图标后重新「添加到主屏幕」  
+
+之后正常打开即可自动跟新，不必再手动改 `?v=`。
+
 ## 玩法
 
 | 操作 | 说明 |
@@ -31,7 +62,7 @@
 - 按下字母播放英文读音，例如 **「A for apple」**
 - 26 个字母均已配置（apple / ball / cat … zebra）
 - **数字与其它键一律忽略**
-- 使用系统 `speechSynthesis` 朗读（iPad / Mac 可用），🔊 可静音
+- 使用 **预录美式英语音频**（`audio/letters/*.m4a`），避免中文系统语音把 A/B 念错
 
 | 键 | 例句 |
 |----|------|

@@ -3,12 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Hint browsers / proxies not to keep a stale shell (GH Pages may still edge-cache ~10min) -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>气球打字 · Balloon Pop</title>
-  <!-- ?v= busts iPad Safari cache — bump when shipping speech/UI fixes -->
-  <link rel="stylesheet" href="style.css?v=20260808g" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>" />
+  <!--
+    CSS/JS are NOT linked here on purpose.
+    boot.js fetches version.json?_=Date.now() every visit, then injects
+    style.css / words.js / phonics.js / game.js with ?v=<git-sha>.
+    That way a cached HTML shell still pulls the newest game code.
+  -->
 </head>
 <body>
   <div class="app">
@@ -61,7 +67,6 @@
       <div id="sky" class="sky" aria-hidden="true"></div>
       <div id="balloons" class="balloons" aria-live="polite"></div>
 
-      <!-- Phonics big card (display only; keys are a sibling so iPad can tap them) -->
       <div id="phonics-panel" class="phonics-panel hidden" aria-live="polite">
         <div class="ph-emoji-wrap" id="ph-emoji-wrap">
           <span class="ph-emoji-ring" aria-hidden="true"></span>
@@ -74,10 +79,9 @@
         <div class="ph-spoken" id="ph-spoken">—</div>
         <div class="ph-phrase" id="ph-phrase">Press a letter A–Z</div>
         <div class="ph-word" id="ph-word">准备好听字母读音吧</div>
-        <div class="ph-audio-status" id="ph-audio-status">录音引擎 · build 20260808g</div>
+        <div class="ph-audio-status" id="ph-audio-status">—</div>
       </div>
 
-      <!-- Letter strip: outside panel so touches work on iPad Safari -->
       <div class="ph-keys hidden" id="ph-keys" role="group" aria-label="字母 A 到 Z"></div>
 
       <div class="typed-bar" id="typed-bar" aria-hidden="true">
@@ -85,7 +89,6 @@
         <span id="typed" class="typed-text"></span>
       </div>
 
-      <!-- Start / settings overlay -->
       <div id="overlay" class="overlay">
         <div class="overlay-card">
           <h2 id="overlay-title">🎈 气球打字</h2>
@@ -133,12 +136,22 @@
     </p>
 
     <footer class="footer">
-      <span>notnotdinner / typing-game · build 20260808g</span>
+      <span>notnotdinner / typing-game · <span id="build-label">loading…</span></span>
       <a href="https://github.com/notnotdinner/typing-game" target="_blank" rel="noopener">GitHub</a>
     </footer>
   </div>
-  <script src="words.js?v=20260808g"></script>
-  <script src="phonics.js?v=20260808g"></script>
-  <script src="game.js?v=20260808g"></script>
+
+  <!--
+    boot.js itself is loaded with a per-navigation timestamp so Safari cannot
+    keep an old loader. It then pulls version.json the same way and injects assets.
+  -->
+  <script>
+    (function () {
+      var s = document.createElement("script");
+      s.src = "boot.js?_=" + Date.now() + "-" + Math.random().toString(36).slice(2);
+      s.async = false;
+      document.body.appendChild(s);
+    })();
+  </script>
 </body>
 </html>
