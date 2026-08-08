@@ -550,46 +550,140 @@
     }
   }
 
-  function pickEnglishVoice() {
+  function pickVoiceForLang(lang) {
     if (!window.speechSynthesis) return null;
     const voices = window.speechSynthesis.getVoices() || [];
     if (!voices.length) return null;
-    // Prefer child-friendly / clear English voices
-    const prefer = [
+    const want = (lang || "en-US").toLowerCase();
+    const primary = want.slice(0, 2);
+
+    if (primary === "zh") {
+      const preferZh = [
+        /tingting/i,
+        /sinji/i,
+        /meijia/i,
+        /tian.?tian/i,
+        /enhanced/i,
+        /zh-cn/i,
+        /zh_cn/i,
+        /chinese/i,
+        /普通话/i,
+      ];
+      for (const re of preferZh) {
+        const v = voices.find((x) => re.test(x.name) || re.test(x.lang));
+        if (v) return v;
+      }
+      return (
+        voices.find((v) => (v.lang || "").toLowerCase().startsWith("zh")) || null
+      );
+    }
+
+    const preferEn = [
       /samantha/i,
       /karen/i,
       /moira/i,
       /daniel/i,
       /google us english/i,
-      /google uk english female/i,
-      /microsoft aria/i,
-      /microsoft jenny/i,
+      /enhanced/i,
       /en-us/i,
       /en-gb/i,
-      /^en/i,
     ];
-    for (const re of prefer) {
+    for (const re of preferEn) {
       const v = voices.find((x) => re.test(x.name) || re.test(x.lang));
       if (v) return v;
     }
     return voices.find((v) => (v.lang || "").toLowerCase().startsWith("en")) || voices[0];
   }
 
-  function ensureVoice() {
-    if (preferredVoice) return preferredVoice;
-    preferredVoice = pickEnglishVoice();
-    return preferredVoice;
+  function ensureVoice(lang) {
+    return pickVoiceForLang(lang || "en-US");
   }
 
-  // Voices may load async (Safari / Chrome)
+  // Voices may load async (Safari / Chrome / iPad)
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
-      preferredVoice = pickEnglishVoice();
+      preferredVoice = pickVoiceForLang("en-US");
     };
-    // warm-up
     try {
-      preferredVoice = pickEnglishVoice();
+      preferredVoice = pickVoiceForLang("en-US");
     } catch (_) {}
+  }
+
+  /** Queue of speech steps; iOS often ignores utterance.rate — use gaps instead */
+  let speakQueueTimer = null;
+  let speakToken = 0;
+
+  function cancelSpeechQueue() {
+    speakToken += 1;
+    if (speakQueueTimer) {
+      clearTimeout(speakQueueTimer);
+      speakQueueTimer = null;
+    }
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
+  }
+
+  /**
+   * Speak a list of { text, lang, gapAfterMs } slowly for kids.
+   * Timing is controlled by gaps (works on iPad where rate is ignored).
+   */
+  function speakSequence(steps, onDone) {
+    cancelSpeechQueue();
+    const token = speakToken;
+    let i = 0;
+
+    function next() {
+      if (token !== speakToken) return;
+      if (state !== "phonics") {
+        if (onDone) onDone();
+        return;
+      }
+      if (i >= steps.length) {
+        if (onDone) onDone();
+        return;
+      }
+      const step = steps[i++];
+      const text = step.text;
+      const lang = step.lang || "en-US";
+      const gap = step.gapAfterMs != null ? step.gapAfterMs : 700;
+
+      if (!text) {
+        speakQueueTimer = setTimeout(next, gap);
+        return;
+      }
+
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang;
+        // iOS largely ignores rate; still set low for desktop browsers
+        u.rate = step.rate != null ? step.rate : 0.4;
+        u.pitch = step.pitch != null ? step.pitch : 1;
+        u.volume = 1;
+        const voice = ensureVoice(lang);
+        if (voice) u.voice = voice;
+
+        let finished = false;
+        const finish = () => {
+          if (finished || token !== speakToken) return;
+          finished = true;
+          clearTimeout(safety);
+          speakQueueTimer = setTimeout(next, gap);
+        };
+        // Safety if onend never fires (some iOS versions)
+        const safety = setTimeout(finish, Math.max(2200, text.length * 500));
+        u.onend = finish;
+        u.onerror = finish;
+
+        window.speechSynthesis.speak(u);
+      } catch (_) {
+        speakQueueTimer = setTimeout(next, gap);
+      }
+    }
+
+    next();
   }
 
   function stopEmojiSpeakAnim() {
@@ -605,6 +699,8 @@
     if (phonicsPanel) phonicsPanel.classList.remove("speaking-active");
   }
 
+  // Ensure cancelSpeechQueue exists when leaving phonics — defined above with speech helpers
+
   function startEmojiSpeakAnim(letter) {
     if (!phEmojiWrap || !phEmoji) return;
     stopEmojiSpeakAnim();
@@ -619,9 +715,10 @@
   }
 
   /**
-   * Kid-friendly speech: very slow, letter SOUND (not letter name) then word.
-   * Never speak bare "A" — English TTS says /eɪ/ ("ei"); we use phonics cues
-   * e.g. A → "aaaah" ≈ short a / 啊.
+   * Kid speech (iPad-safe):
+   * 1) Letter SOUND in Chinese (A →「啊」not English "A"/ei)
+   * 2) Long pause (iOS ignores rate — we slow with gaps)
+   * 3) English "for" + word, spoken slowly with gaps
    */
   function speakPhonics(entry) {
     if (!entry) return;
@@ -629,11 +726,9 @@
     const startAnim = () => startEmojiSpeakAnim(entry.letter.toLowerCase());
     const stopAnim = () => stopEmojiSpeakAnim();
 
-    // Longer window for slow 3-part speech
-    const approxMs = Math.max(6500, 2800 + entry.word.length * 280);
-
     if (!sfxOn) {
       startAnim();
+      if (phAnimTimer) clearTimeout(phAnimTimer);
       phAnimTimer = setTimeout(stopAnim, 900);
       return;
     }
@@ -642,74 +737,55 @@
       tone(523.25, 0.12, "sine", 0.08);
       tone(659.25, 0.14, "sine", 0.07, 0.14);
       startAnim();
-      phAnimTimer = setTimeout(stopAnim, approxMs);
+      if (phAnimTimer) clearTimeout(phAnimTimer);
+      phAnimTimer = setTimeout(stopAnim, 2000);
       return;
     }
 
-    try {
-      window.speechSynthesis.cancel();
-      stopEmojiSpeakAnim();
+    cancelSpeechQueue();
+    stopEmojiSpeakAnim();
+    startAnim();
 
-      const voice = ensureVoice();
-      // Very slow for young children (Web Speech: 0.1–10, 1 = normal)
-      const soundRate = 0.42;
-      const wordRate = 0.48;
-      const kidPitch = 0.95;
+    const sound = entry.sound || { lang: "zh-CN", text: "啊", repeat: 2 };
+    const soundText = typeof sound === "string" ? sound : sound.text;
+    const soundLang = typeof sound === "string" ? "zh-CN" : sound.lang || "zh-CN";
+    const repeat = typeof sound === "string" ? 2 : sound.repeat || 2;
 
-      function makeUtterance(text, rate) {
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "en-US";
-        u.rate = rate;
-        u.pitch = kidPitch;
-        u.volume = 1;
-        if (voice) u.voice = voice;
-        return u;
-      }
-
-      function speakNext(utt) {
-        if (state !== "phonics") {
-          stopAnim();
-          return;
-        }
-        try {
-          window.speechSynthesis.speak(utt);
-        } catch (_) {
-          stopAnim();
-        }
-      }
-
-      // Phonics sound cue (NOT the letter name "A"/"B"/…)
-      const soundText = entry.sound || "ah";
-      // Elongate for A-like vowels so kids hear a clear "ah / a"
-      const soundPart = makeUtterance(soundText, soundRate);
-      // Then slowly: "for" … word (commas = pauses)
-      const forPart = makeUtterance("for", wordRate);
-      const wordPart = makeUtterance(`${entry.word}.`, wordRate);
-
-      soundPart.onstart = () => startAnim();
-      soundPart.onerror = () => stopAnim();
-      forPart.onerror = () => stopAnim();
-      wordPart.onend = () => stopAnim();
-      wordPart.onerror = () => stopAnim();
-
-      // sound → long pause → "for" → pause → word
-      soundPart.onend = () => {
-        setTimeout(() => {
-          forPart.onend = () => {
-            setTimeout(() => speakNext(wordPart), 350);
-          };
-          speakNext(forPart);
-        }, 700);
-      };
-
-      startAnim();
-      phAnimTimer = setTimeout(stopAnim, approxMs + 1500);
-      speakNext(soundPart);
-    } catch (_) {
-      tone(523.25, 0.12, "sine", 0.08);
-      startAnim();
-      phAnimTimer = setTimeout(stopAnim, approxMs);
+    // Build slow sequence: 啊 … 啊 …  (gap)  for  (gap)  ap-ple
+    const steps = [];
+    for (let r = 0; r < repeat; r++) {
+      steps.push({
+        text: soundText,
+        lang: soundLang,
+        rate: 0.35,
+        gapAfterMs: 850, // long pause — this is what actually slows iPad speech
+      });
     }
+    // extra silence before English
+    steps.push({ text: "", gapAfterMs: 500 });
+    steps.push({ text: "for", lang: "en-US", rate: 0.4, gapAfterMs: 750 });
+    // Speak English word slowly; split multi-word like "ice cream"
+    const wordBits = String(entry.word).split(/\s+/);
+    wordBits.forEach((bit, idx) => {
+      steps.push({
+        text: bit,
+        lang: "en-US",
+        rate: 0.38,
+        gapAfterMs: idx === wordBits.length - 1 ? 400 : 550,
+      });
+    });
+
+    if (phAnimTimer) clearTimeout(phAnimTimer);
+    // Failsafe stop anim
+    phAnimTimer = setTimeout(stopAnim, 14000);
+
+    speakSequence(steps, () => {
+      if (phAnimTimer) {
+        clearTimeout(phAnimTimer);
+        phAnimTimer = null;
+      }
+      stopAnim();
+    });
   }
 
   function showPhonicsCard(entry) {
@@ -791,11 +867,7 @@
   }
 
   function stopPhonics() {
-    if (window.speechSynthesis) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch (_) {}
-    }
+    cancelSpeechQueue();
     stopEmojiSpeakAnim();
     phonicsPanel.classList.add("hidden");
     if (phKeys) phKeys.classList.add("hidden");
@@ -1158,11 +1230,7 @@
 
   /** Reset phonics DOM without changing menu state text */
   function stopPhonicsUiOnly() {
-    if (window.speechSynthesis) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch (_) {}
-    }
+    cancelSpeechQueue();
     stopEmojiSpeakAnim();
     if (phonicsPanel) phonicsPanel.classList.add("hidden");
     if (phKeys) phKeys.classList.add("hidden");

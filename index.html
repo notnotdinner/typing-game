@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>气球打字 · Balloon Pop</title>
-  <link rel="stylesheet" href="style.css" />
+  <!-- ?v= busts iPad Safari cache — bump when shipping speech/UI fixes -->
+  <link rel="stylesheet" href="style.css?v=20260808b" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>" />
 </head>
 <body>
@@ -128,12 +131,12 @@
     </p>
 
     <footer class="footer">
-      <span>notnotdinner / typing-game</span>
+      <span>notnotdinner / typing-game · build 20260808b</span>
       <a href="https://github.com/notnotdinner/typing-game" target="_blank" rel="noopener">GitHub</a>
     </footer>
   </div>
-  <script src="words.js"></script>
-  <script src="phonics.js"></script>
-  <script src="game.js"></script>
+  <script src="words.js?v=20260808b"></script>
+  <script src="phonics.js?v=20260808b"></script>
+  <script src="game.js?v=20260808b"></script>
 </body>
 </html>
