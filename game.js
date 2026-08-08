@@ -5,6 +5,7 @@
     numbers: "balloon-pop.numbers",
     music: "balloon-pop.music",
     sfx: "balloon-pop.sfx",
+    playMode: "balloon-pop.playMode", // game | phonics
   };
 
   const DIFFICULTY = {
@@ -67,15 +68,29 @@
   const numbersLabel = document.getElementById("numbers-label");
   const btnMusic = document.getElementById("btn-music");
   const btnSfx = document.getElementById("btn-sfx");
+  const hudGame = document.getElementById("hud-game");
+  const hudPhonics = document.getElementById("hud-phonics");
+  const gameSettings = document.getElementById("game-settings");
+  const phonicsHint = document.getElementById("phonics-hint");
+  const phonicsPanel = document.getElementById("phonics-panel");
+  const phEmoji = document.getElementById("ph-emoji");
+  const phLetter = document.getElementById("ph-letter");
+  const phPhrase = document.getElementById("ph-phrase");
+  const phWord = document.getElementById("ph-word");
+  const phKeys = document.getElementById("ph-keys");
+  const phCount = document.getElementById("ph-count");
+  const phLast = document.getElementById("ph-last");
+  const footerHint = document.getElementById("footer-hint");
 
   // State
+  let playMode = localStorage.getItem(STORAGE.playMode) || "game"; // game | phonics
   let difficulty = localStorage.getItem(STORAGE.diff) || "normal";
   let includeNumbers = localStorage.getItem(STORAGE.numbers) === "1";
   let musicOn = localStorage.getItem(STORAGE.music) !== "0";
   let sfxOn = localStorage.getItem(STORAGE.sfx) !== "0";
   let best = Number(localStorage.getItem(STORAGE.best) || 0);
 
-  let state = "menu"; // menu | playing | over
+  let state = "menu"; // menu | playing | over | phonics
   let score = 0;
   let combo = 0;
   let maxCombo = 0;
@@ -110,6 +125,10 @@
   let missTimes = []; // recent miss timestamps
   let inputLockedUntil = 0;
   let lockCount = 0; // how many times locked this run (escalates slightly)
+
+  // Phonics session
+  let phSeen = new Set(); // unique letters heard this session
+  let preferredVoice = null;
 
   // --- Audio ---
   let audioCtx = null;
@@ -462,6 +481,9 @@
   }
 
   function syncSettingsUI() {
+    document.querySelectorAll(".mode-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.playmode === playMode);
+    });
     document.querySelectorAll(".seg-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.diff === difficulty);
     });
@@ -469,6 +491,202 @@
     numbersLabel.textContent = includeNumbers
       ? "开启（字母 + 数字 0–9）"
       : "关闭（仅字母 a–z）";
+
+    const isPh = playMode === "phonics";
+    if (gameSettings) gameSettings.classList.toggle("hidden", isPh);
+    if (phonicsHint) phonicsHint.classList.toggle("hidden", !isPh);
+    if (startBtn) {
+      startBtn.textContent = isPh ? "开始读音" : "开始游戏";
+    }
+  }
+
+  function buildPhonicsKeyStrip() {
+    if (!phKeys) return;
+    phKeys.innerHTML = "";
+    for (let i = 0; i < 26; i++) {
+      const ch = String.fromCharCode(97 + i);
+      const span = document.createElement("span");
+      span.className = "ph-key";
+      span.dataset.ch = ch;
+      span.textContent = ch.toUpperCase();
+      phKeys.appendChild(span);
+    }
+  }
+
+  function markPhonicsKey(ch) {
+    const el = phKeys && phKeys.querySelector(`.ph-key[data-ch="${ch}"]`);
+    if (el) el.classList.add("heard");
+  }
+
+  function updatePhonicsHud() {
+    if (phCount) phCount.textContent = `${phSeen.size} / 26`;
+    if (phLast) {
+      const last = [...phSeen].pop();
+      // show most recent from typed
+      phLast.textContent = lastKey ? lastKey.toUpperCase() : "—";
+    }
+  }
+
+  function pickEnglishVoice() {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    // Prefer child-friendly / clear English voices
+    const prefer = [
+      /samantha/i,
+      /karen/i,
+      /moira/i,
+      /daniel/i,
+      /google us english/i,
+      /google uk english female/i,
+      /microsoft aria/i,
+      /microsoft jenny/i,
+      /en-us/i,
+      /en-gb/i,
+      /^en/i,
+    ];
+    for (const re of prefer) {
+      const v = voices.find((x) => re.test(x.name) || re.test(x.lang));
+      if (v) return v;
+    }
+    return voices.find((v) => (v.lang || "").toLowerCase().startsWith("en")) || voices[0];
+  }
+
+  function ensureVoice() {
+    if (preferredVoice) return preferredVoice;
+    preferredVoice = pickEnglishVoice();
+    return preferredVoice;
+  }
+
+  // Voices may load async (Safari / Chrome)
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      preferredVoice = pickEnglishVoice();
+    };
+    // warm-up
+    try {
+      preferredVoice = pickEnglishVoice();
+    } catch (_) {}
+  }
+
+  function speakPhonics(entry) {
+    if (!entry) return;
+    if (!sfxOn) return; // respect mute as "voice off"
+    if (!window.speechSynthesis) {
+      // fallback soft beep if no TTS
+      tone(523.25, 0.1, "sine", 0.08);
+      tone(659.25, 0.12, "sine", 0.07, 0.1);
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(entry.phrase);
+      u.lang = "en-US";
+      u.rate = 0.9;
+      u.pitch = 1.05;
+      u.volume = 1;
+      const voice = ensureVoice();
+      if (voice) u.voice = voice;
+      window.speechSynthesis.speak(u);
+    } catch (_) {
+      tone(523.25, 0.1, "sine", 0.08);
+    }
+  }
+
+  function showPhonicsCard(entry) {
+    if (!entry) return;
+    phEmoji.textContent = entry.emoji;
+    phLetter.textContent = entry.letter;
+    phPhrase.textContent = entry.phrase;
+    phWord.textContent = entry.word;
+    phonicsPanel.classList.remove("pop");
+    // reflow for animation
+    void phonicsPanel.offsetWidth;
+    phonicsPanel.classList.add("pop");
+  }
+
+  function onPhonicsLetter(ch) {
+    // Only A–Z; ignore everything else (digits, symbols)
+    if (!ch || ch < "a" || ch > "z") return;
+    const entry = window.getPhonics ? window.getPhonics(ch) : null;
+    if (!entry) return;
+
+    lastKey = ch;
+    phSeen.add(ch);
+    markPhonicsKey(ch);
+    showPhonicsCard(entry);
+    speakPhonics(entry);
+    // tiny click so feedback is instant even before TTS starts
+    if (sfxOn) tone(660 + (ch.charCodeAt(0) - 97) * 12, 0.05, "sine", 0.04);
+    updatePhonicsHud();
+    typedEl.textContent = ch.toUpperCase();
+  }
+
+  function startPhonics() {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    stopMusic();
+    clearBalloons();
+    clearMashState();
+    phSeen = new Set();
+    lastKey = "";
+    state = "phonics";
+
+    hudGame.classList.add("hidden");
+    hudPhonics.classList.remove("hidden");
+    phonicsPanel.classList.remove("hidden");
+    balloonsEl.classList.add("hidden");
+    typedBarShow(true);
+    stage.classList.add("phonics-mode");
+    stage.setAttribute("aria-label", "读音模式");
+
+    buildPhonicsKeyStrip();
+    // reset heard styles
+    phKeys.querySelectorAll(".ph-key").forEach((el) => el.classList.remove("heard"));
+    phEmoji.textContent = "🔤";
+    phLetter.textContent = "?";
+    phPhrase.textContent = "Press a letter A–Z";
+    phWord.textContent = "按任意字母键开始听读音";
+    updatePhonicsHud();
+    typedEl.textContent = "";
+
+    hideOverlay();
+    focusStage();
+    // Unlock voices on user gesture (iPad)
+    ensureVoice();
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
+    if (footerHint) {
+      footerHint.innerHTML =
+        "读音模式 · 只响应 <kbd>A</kbd>–<kbd>Z</kbd> · 其它键忽略 · <kbd>Esc</kbd> 返回菜单";
+    }
+  }
+
+  function stopPhonics() {
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
+    phonicsPanel.classList.add("hidden");
+    balloonsEl.classList.remove("hidden");
+    hudPhonics.classList.add("hidden");
+    hudGame.classList.remove("hidden");
+    stage.classList.remove("phonics-mode");
+    stage.setAttribute("aria-label", "气球打字游戏区");
+    if (footerHint) {
+      footerHint.innerHTML =
+        '专为 <strong>蓝牙 / 外接键盘</strong> 设计 · 一气球一字母 · 乱按会锁定输入 · <kbd>Esc</kbd> 暂停';
+    }
+  }
+
+  function typedBarShow(_show) {
+    // typed bar always visible; no-op helper reserved
   }
 
   // --- Balloons: one letter each ---
@@ -795,11 +1013,14 @@
 
   function showMenu(title, msg, btnText, stats) {
     state = stats ? "over" : "menu";
+    stopPhonicsUiOnly();
     overlay.classList.remove("hidden");
     overlayTitle.textContent = title;
     overlayMsg.innerHTML = msg;
-    startBtn.textContent = btnText;
+    startBtn.textContent =
+      btnText || (playMode === "phonics" ? "开始读音" : "开始游戏");
     settingsEl.style.display = stats ? "none" : "";
+    syncSettingsUI();
     if (stats) {
       resultStats.classList.remove("hidden");
       resultStats.innerHTML = `
@@ -811,6 +1032,20 @@
       resultStats.classList.add("hidden");
       resultStats.innerHTML = "";
     }
+  }
+
+  /** Reset phonics DOM without changing menu state text */
+  function stopPhonicsUiOnly() {
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
+    if (phonicsPanel) phonicsPanel.classList.add("hidden");
+    if (balloonsEl) balloonsEl.classList.remove("hidden");
+    if (hudPhonics) hudPhonics.classList.add("hidden");
+    if (hudGame) hudGame.classList.remove("hidden");
+    stage.classList.remove("phonics-mode");
   }
 
   function hideOverlay() {
@@ -831,6 +1066,13 @@
 
   function startGame() {
     ensureAudio();
+
+    if (playMode === "phonics") {
+      startPhonics();
+      return;
+    }
+
+    stopPhonics();
     const cfg = DIFFICULTY[difficulty];
     score = 0;
     combo = 0;
@@ -889,17 +1131,21 @@
   }
 
   function pauseToMenu() {
-    if (state !== "playing") return;
-    state = "menu";
+    if (state !== "playing" && state !== "phonics") return;
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
+    stopMusic();
     clearBalloons();
     lastKey = "";
+    if (state === "phonics") stopPhonics();
+    state = "menu";
     updateHud();
     showMenu(
       "已暂停",
-      "可调整难度与数字选项，然后重新开始。",
-      "继续 / 开始",
+      playMode === "phonics"
+        ? "读音模式：按 A–Z 听 “A for apple”。其它键不响应。"
+        : "可调整模式、难度与数字选项，然后重新开始。",
+      playMode === "phonics" ? "继续读音" : "继续 / 开始",
       null
     );
   }
@@ -938,6 +1184,10 @@
   }
 
   function onLetter(ch) {
+    if (state === "phonics") {
+      onPhonicsLetter(ch);
+      return;
+    }
     if (state !== "playing") return;
     if (!ch) return;
 
@@ -977,6 +1227,28 @@
   }
 
   // --- Bindings ---
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      playMode = btn.dataset.playmode || "game";
+      localStorage.setItem(STORAGE.playMode, playMode);
+      syncSettingsUI();
+      // Update menu copy live
+      if (state === "menu") {
+        if (playMode === "phonics") {
+          overlayTitle.textContent = "🔊 读音模式";
+          overlayMsg.innerHTML =
+            "儿童学字母：按下键盘 <strong>A–Z</strong> 会播放 <em>A for apple</em> 这样的读音。数字和其它键一律忽略。";
+          startBtn.textContent = "开始读音";
+        } else {
+          overlayTitle.textContent = "🎈 气球打字";
+          overlayMsg.innerHTML =
+            "接上蓝牙键盘即可玩。每个气球一个字母；偶尔会触发<strong>彩蛋</strong>——同屏 10 个相同字母，全部打掉有惊喜！";
+          startBtn.textContent = "开始游戏";
+        }
+      }
+    });
+  });
+
   document.querySelectorAll(".seg-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       difficulty = btn.dataset.diff;
@@ -1032,7 +1304,7 @@
     (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (state === "playing") pauseToMenu();
+        if (state === "playing" || state === "phonics") pauseToMenu();
         return;
       }
 
@@ -1044,7 +1316,7 @@
         return;
       }
 
-      if (state !== "playing") return;
+      if (state !== "playing" && state !== "phonics") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // Ignore OS key-repeat (holding a key) — only discrete presses count
       if (e.repeat) {
@@ -1055,6 +1327,15 @@
       // Prefer e.key; fall back to e.code (layout-stable on BT keyboards)
       let ch = normalizeKey(e.key);
       if (!ch) ch = normalizeFromCode(e.code);
+
+      // Phonics: only A–Z; ignore digits and everything else
+      if (state === "phonics") {
+        if (!ch || ch < "a" || ch > "z") return;
+        e.preventDefault();
+        onLetter(ch);
+        return;
+      }
+
       if (!ch) return;
 
       e.preventDefault();
@@ -1069,10 +1350,19 @@
   syncAudioButtons();
   spawnClouds();
   updateHud();
-  showMenu(
-    "🎈 气球打字",
-    "每个气球上有一个字母。按下对应键即可炸掉它。别让气球飞出顶部！",
-    "开始游戏",
-    null
-  );
+  if (playMode === "phonics") {
+    showMenu(
+      "🔊 读音模式",
+      "儿童学字母：按下键盘 <strong>A–Z</strong> 会播放 <em>A for apple</em> 这样的读音。数字和其它键一律忽略。",
+      "开始读音",
+      null
+    );
+  } else {
+    showMenu(
+      "🎈 气球打字",
+      "每个气球上有一个字母。按下对应键即可炸掉它。别让气球飞出顶部！可切换到<strong>读音模式</strong>学字母。",
+      "开始游戏",
+      null
+    );
+  }
 })();

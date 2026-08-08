@@ -20,7 +20,7 @@
       </div>
     </header>
 
-    <div class="hud">
+    <div class="hud" id="hud-game">
       <div class="stat">
         <span class="label">得分</span>
         <span id="score" class="value">0</span>
@@ -39,9 +39,34 @@
       </div>
     </div>
 
+    <div class="hud hud-phonics hidden" id="hud-phonics">
+      <div class="stat">
+        <span class="label">本局字母</span>
+        <span id="ph-count" class="value">0 / 26</span>
+      </div>
+      <div class="stat">
+        <span class="label">刚学到</span>
+        <span id="ph-last" class="value">—</span>
+      </div>
+      <div class="stat wide">
+        <span class="label">提示</span>
+        <span class="value hint-val">按 A–Z 听读音</span>
+      </div>
+    </div>
+
     <div class="stage" id="stage" tabindex="0" role="application" aria-label="气球打字游戏区">
       <div id="sky" class="sky" aria-hidden="true"></div>
       <div id="balloons" class="balloons" aria-live="polite"></div>
+
+      <!-- Phonics big card -->
+      <div id="phonics-panel" class="phonics-panel hidden" aria-live="polite">
+        <div class="ph-emoji" id="ph-emoji">🔤</div>
+        <div class="ph-letter" id="ph-letter">?</div>
+        <div class="ph-phrase" id="ph-phrase">Press a letter A–Z</div>
+        <div class="ph-word" id="ph-word">准备好听字母读音吧</div>
+        <div class="ph-keys" id="ph-keys" aria-hidden="true"></div>
+      </div>
+
       <div class="typed-bar" id="typed-bar" aria-hidden="true">
         <span class="typed-label">刚按</span>
         <span id="typed" class="typed-text"></span>
@@ -55,21 +80,33 @@
 
           <div id="settings" class="settings">
             <div class="setting-group">
-              <span class="setting-label">难度</span>
-              <div class="seg" role="group" aria-label="难度">
-                <button type="button" class="seg-btn active" data-diff="easy">简单</button>
-                <button type="button" class="seg-btn" data-diff="normal">普通</button>
-                <button type="button" class="seg-btn" data-diff="hard">困难</button>
+              <span class="setting-label">模式</span>
+              <div class="seg" role="group" aria-label="模式">
+                <button type="button" class="mode-btn active" data-playmode="game">🎈 气球游戏</button>
+                <button type="button" class="mode-btn" data-playmode="phonics">🔊 读音模式</button>
               </div>
             </div>
-            <div class="setting-group">
-              <span class="setting-label">数字</span>
-              <label class="switch">
-                <input type="checkbox" id="opt-numbers" />
-                <span class="switch-ui"></span>
-                <span class="switch-text" id="numbers-label">关闭（仅字母 a–z）</span>
-              </label>
+            <div id="game-settings">
+              <div class="setting-group">
+                <span class="setting-label">难度</span>
+                <div class="seg" role="group" aria-label="难度">
+                  <button type="button" class="seg-btn active" data-diff="easy">简单</button>
+                  <button type="button" class="seg-btn" data-diff="normal">普通</button>
+                  <button type="button" class="seg-btn" data-diff="hard">困难</button>
+                </div>
+              </div>
+              <div class="setting-group">
+                <span class="setting-label">数字</span>
+                <label class="switch">
+                  <input type="checkbox" id="opt-numbers" />
+                  <span class="switch-ui"></span>
+                  <span class="switch-text" id="numbers-label">关闭（仅字母 a–z）</span>
+                </label>
+              </div>
             </div>
+            <p id="phonics-hint" class="phonics-hint hidden">
+              儿童模式：只响应 A–Z。按下字母会大声读出 <strong>A for apple</strong> 这类句子。数字与其它键忽略。
+            </p>
           </div>
 
           <div id="result-stats" class="result-stats hidden"></div>
@@ -78,7 +115,7 @@
       </div>
     </div>
 
-    <p class="hint">
+    <p class="hint" id="footer-hint">
       专为 <strong>蓝牙 / 外接键盘</strong> 设计 · 一气球一字母 · 乱按会锁定输入 · <kbd>Esc</kbd> 暂停
     </p>
 
@@ -88,6 +125,7 @@
     </footer>
   </div>
   <script src="words.js"></script>
+  <script src="phonics.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
