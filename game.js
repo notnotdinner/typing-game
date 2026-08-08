@@ -96,6 +96,21 @@
   const EGG_COOLDOWN_MS = 28000;
   const EGG_MIN_PLAY_MS = 12000; // don't fire in the first few seconds
 
+  // Anti-mash: stop keyboard spam from clearing balloons by luck
+  const MASH = {
+    streakLock: 4, // consecutive misses → lock
+    windowMs: 1400, // sliding window
+    windowMax: 6, // misses in window → lock
+    lockMs: 1200, // base lock duration
+    lockStepMs: 400, // extra lock if they keep mashing while locked
+    lockCapMs: 2800,
+    penalty: 8, // score penalty on lock
+  };
+  let missStreak = 0;
+  let missTimes = []; // recent miss timestamps
+  let inputLockedUntil = 0;
+  let lockCount = 0; // how many times locked this run (escalates slightly)
+
   // --- Audio ---
   let audioCtx = null;
   let musicNodes = null;
@@ -139,6 +154,17 @@
   function playMiss() {
     tone(180, 0.15, "sawtooth", 0.06);
     tone(120, 0.18, "triangle", 0.04, 0.04);
+  }
+
+  function playLock() {
+    tone(140, 0.12, "square", 0.05);
+    tone(110, 0.2, "sawtooth", 0.06, 0.08);
+    tone(90, 0.25, "triangle", 0.05, 0.18);
+  }
+
+  function playLockedTap() {
+    // soft reject while locked
+    tone(90, 0.05, "square", 0.03);
   }
 
   function playGameOver() {
@@ -361,12 +387,78 @@
     return "❤️".repeat(n);
   }
 
+  function isInputLocked() {
+    return performance.now() < inputLockedUntil;
+  }
+
   function updateHud() {
     scoreEl.textContent = String(score);
     comboEl.textContent = String(combo);
     livesEl.textContent = hearts(lives);
     bestEl.textContent = String(best);
-    typedEl.textContent = lastKey ? lastKey.toUpperCase() : "";
+    if (isInputLocked()) {
+      const left = Math.ceil((inputLockedUntil - performance.now()) / 100) / 10;
+      typedEl.textContent = `🔒 ${left.toFixed(1)}s`;
+      typedEl.classList.add("locked");
+    } else {
+      typedEl.classList.remove("locked");
+      typedEl.textContent = lastKey ? lastKey.toUpperCase() : "";
+    }
+  }
+
+  function clearMashState() {
+    missStreak = 0;
+    missTimes = [];
+    inputLockedUntil = 0;
+    lockCount = 0;
+    stage.classList.remove("input-locked");
+    typedEl.classList.remove("locked");
+  }
+
+  function registerMiss() {
+    const now = performance.now();
+    missStreak += 1;
+    missTimes.push(now);
+    // prune window
+    missTimes = missTimes.filter((t) => now - t <= MASH.windowMs);
+
+    const windowSpam = missTimes.length >= MASH.windowMax;
+    const streakSpam = missStreak >= MASH.streakLock;
+
+    if (windowSpam || streakSpam) {
+      engageInputLock();
+    }
+  }
+
+  function engageInputLock() {
+    const now = performance.now();
+    lockCount += 1;
+    const extra = Math.min(lockCount - 1, 3) * MASH.lockStepMs;
+    const dur = Math.min(MASH.lockCapMs, MASH.lockMs + extra);
+    // If already locked, extend
+    inputLockedUntil = Math.max(inputLockedUntil, now) + (isInputLocked() ? MASH.lockStepMs : dur);
+    if (inputLockedUntil - now > MASH.lockCapMs) {
+      inputLockedUntil = now + MASH.lockCapMs;
+    }
+
+    missStreak = 0;
+    missTimes = [];
+    combo = 0;
+    score = Math.max(0, score - MASH.penalty);
+
+    stage.classList.add("input-locked");
+    playLock();
+    showToast(`⛔ 乱按锁定 ${((inputLockedUntil - now) / 1000).toFixed(1)}s  −${MASH.penalty}`, "mash-lock");
+    updateHud();
+
+    // auto clear visual when unlock time passes
+    const wait = inputLockedUntil - now + 30;
+    setTimeout(() => {
+      if (!isInputLocked()) {
+        stage.classList.remove("input-locked");
+        updateHud();
+      }
+    }, wait);
   }
 
   function syncSettingsUI() {
@@ -741,6 +833,7 @@
     egg = null;
     eggCooldown = 8000;
     eggPlayTime = 0;
+    clearMashState();
     clearBalloons();
     updateHud();
     hideOverlay();
@@ -837,6 +930,18 @@
     if (state !== "playing") return;
     if (!ch) return;
 
+    // Locked out after mashing — ignore all letters, extend if they keep spamming
+    if (isInputLocked()) {
+      playLockedTap();
+      // mashing during lock slightly extends (capped)
+      const now = performance.now();
+      if (inputLockedUntil - now < MASH.lockCapMs) {
+        inputLockedUntil = Math.min(now + MASH.lockCapMs, inputLockedUntil + 80);
+      }
+      updateHud();
+      return;
+    }
+
     lastKey = ch;
     updateHud();
 
@@ -845,6 +950,7 @@
     if (matches.length === 0) {
       combo = 0;
       playMiss();
+      registerMiss();
       updateHud();
       // brief flash on typed bar
       typedEl.classList.add("miss");
@@ -852,6 +958,9 @@
       return;
     }
 
+    // Correct hit resets mash counters
+    missStreak = 0;
+    missTimes = [];
     matches.sort((a, b) => b.y - a.y);
     popBalloon(matches[0]);
   }
@@ -926,6 +1035,11 @@
 
       if (state !== "playing") return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Ignore OS key-repeat (holding a key) — only discrete presses count
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
 
       // Prefer e.key; fall back to e.code (layout-stable on BT keyboards)
       let ch = normalizeKey(e.key);
