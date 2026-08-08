@@ -618,25 +618,28 @@
     void phEmojiWrap.offsetWidth;
   }
 
+  /**
+   * Kid-friendly speech: slow rate, clear pauses.
+   * Speaks as: "A" → pause → "for apple" (letter first, then word).
+   */
   function speakPhonics(entry) {
     if (!entry) return;
 
     const startAnim = () => startEmojiSpeakAnim(entry.letter.toLowerCase());
     const stopAnim = () => stopEmojiSpeakAnim();
 
-    // Always animate the icon; duration falls back if TTS unavailable
-    const approxMs = Math.max(1600, entry.phrase.length * 110);
+    // Slow speech runs longer — keep emoji anim for full duration
+    const approxMs = Math.max(4200, 1800 + entry.word.length * 220);
 
     if (!sfxOn) {
-      // muted: still show icon dance briefly
       startAnim();
       phAnimTimer = setTimeout(stopAnim, 900);
       return;
     }
 
     if (!window.speechSynthesis) {
-      tone(523.25, 0.1, "sine", 0.08);
-      tone(659.25, 0.12, "sine", 0.07, 0.1);
+      tone(523.25, 0.12, "sine", 0.08);
+      tone(659.25, 0.14, "sine", 0.07, 0.14);
       startAnim();
       phAnimTimer = setTimeout(stopAnim, approxMs);
       return;
@@ -646,25 +649,53 @@
       window.speechSynthesis.cancel();
       stopEmojiSpeakAnim();
 
-      const u = new SpeechSynthesisUtterance(entry.phrase);
-      u.lang = "en-US";
-      u.rate = 0.9;
-      u.pitch = 1.05;
-      u.volume = 1;
       const voice = ensureVoice();
-      if (voice) u.voice = voice;
+      // Rate ~0.55–0.65 is slow enough for kids; pitch near 1 for clarity
+      const kidRate = 0.58;
+      const kidPitch = 1.0;
 
-      u.onstart = () => startAnim();
-      u.onend = () => stopAnim();
-      u.onerror = () => stopAnim();
+      function makeUtterance(text) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = "en-US";
+        u.rate = kidRate;
+        u.pitch = kidPitch;
+        u.volume = 1;
+        if (voice) u.voice = voice;
+        return u;
+      }
 
-      // Safety: some browsers fire onstart late or not at all
+      // Part 1: letter name alone (clear bite)
+      // Use spelled form so engines say "A" / "B" not "ay" weirdly on some voices
+      const letterPart = makeUtterance(entry.letter);
+      // Part 2: "for apple" — periods force small pauses for clearer syllables
+      const wordPart = makeUtterance(`for. ${entry.word}.`);
+
+      letterPart.onstart = () => startAnim();
+      letterPart.onerror = () => stopAnim();
+      wordPart.onend = () => stopAnim();
+      wordPart.onerror = () => stopAnim();
+
+      // Chain: letter → short gap → "for word"
+      letterPart.onend = () => {
+        // Extra silence between letter and word (~0.45s) for kids to process
+        setTimeout(() => {
+          if (state !== "phonics") {
+            stopAnim();
+            return;
+          }
+          try {
+            window.speechSynthesis.speak(wordPart);
+          } catch (_) {
+            stopAnim();
+          }
+        }, 450);
+      };
+
       startAnim();
-      phAnimTimer = setTimeout(stopAnim, approxMs + 800);
-
-      window.speechSynthesis.speak(u);
+      phAnimTimer = setTimeout(stopAnim, approxMs + 1200);
+      window.speechSynthesis.speak(letterPart);
     } catch (_) {
-      tone(523.25, 0.1, "sine", 0.08);
+      tone(523.25, 0.12, "sine", 0.08);
       startAnim();
       phAnimTimer = setTimeout(stopAnim, approxMs);
     }
