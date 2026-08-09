@@ -841,9 +841,8 @@
   }
 
   /**
-   * Pre-recorded sequence:
-   *   bee (letter) → pause → bee → pause → for → pause → word
-   * On-screen shows spoken name so we can verify B≠D.
+   * Human-recorded letter name (once) → for → word.
+   * Letters: audio/letters/{a-z}.m4a from real recordings (not TTS).
    */
   async function speakPhonics(entry) {
     if (!entry) return;
@@ -857,10 +856,8 @@
     startAnim();
 
     const letter = entry.letter.toLowerCase();
-    const spoken =
-      (window.LETTER_NAMES && window.LETTER_NAMES[letter]) || letter;
-    if (phSpoken) phSpoken.textContent = `🔊 ${spoken}`;
-    setPhStatus(`播放字母 ${entry.letter} = ${spoken} · ${AUDIO_VER}`, false);
+    if (phSpoken) phSpoken.textContent = `🔊 ${entry.letter}`;
+    setPhStatus(`字母 ${entry.letter} · build ${AUDIO_VER}`, false);
 
     if (!sfxOn) {
       setPhStatus("音效已关闭（点右上角 🔊 打开）", true);
@@ -869,45 +866,37 @@
       return;
     }
 
-    // Prefer m4a (iOS-friendly), fallback wav
-    const letterUrls = [
-      audioUrl(`audio/letters/${letter}.m4a`),
-      audioUrl(`audio/letters/${letter}.wav`),
-    ];
+    // Human letter-name clips only (m4a). No TTS for letters.
+    const letterUrls = [audioUrl(`audio/letters/${letter}.m4a`)];
     const forUrls = [audioUrl("audio/words/for.m4a")];
     const wordUrls = [audioUrl(`audio/words/${wordAudioKey(entry.word)}.m4a`)];
 
     if (phAnimTimer) clearTimeout(phAnimTimer);
-    phAnimTimer = setTimeout(stopAnim, 18000);
+    phAnimTimer = setTimeout(stopAnim, 14000);
 
-    // Letter twice
+    // Letter name once (normal ABC reading)
     let r = await playAudioUrl(letterUrls);
     if (token !== phAudioToken || state !== "phonics") return;
     if (!r.ok) {
-      setPhStatus(`字母音频加载失败: ${letter}（请检查网络/刷新）`, true);
+      setPhStatus(`字母音频失败: ${letter}.m4a — 请刷新重试`, true);
       stopAnim();
       return;
     }
-    setPhStatus(`✓ 正在播 ${spoken} · ${r.url.split("/").pop()}`, false);
 
-    await waitMs(600);
-    if (token !== phAudioToken || state !== "phonics") return;
-
-    r = await playAudioUrl(letterUrls);
-    if (token !== phAudioToken || state !== "phonics") return;
-    await waitMs(700);
+    await waitMs(400);
     if (token !== phAudioToken || state !== "phonics") return;
 
     if (phSpoken) phSpoken.textContent = `🔊 for`;
     r = await playAudioUrl(forUrls);
     if (token !== phAudioToken || state !== "phonics") return;
-    await waitMs(500);
+
+    await waitMs(300);
     if (token !== phAudioToken || state !== "phonics") return;
 
     if (phSpoken) phSpoken.textContent = `🔊 ${entry.word}`;
     r = await playAudioUrl(wordUrls);
     if (!r.ok) setPhStatus(`单词音频失败: ${entry.word}`, true);
-    else setPhStatus(`完成 · ${entry.letter} = ${spoken} · for ${entry.word}`, false);
+    else setPhStatus(`${entry.letter} for ${entry.word} · build ${AUDIO_VER}`, false);
 
     if (token === phAudioToken) {
       if (phAnimTimer) {
@@ -922,15 +911,10 @@
     if (!entry) return;
     phEmoji.textContent = entry.emoji;
     phLetter.textContent = entry.letter;
-    const spoken =
-      (window.LETTER_NAMES &&
-        window.LETTER_NAMES[entry.letter.toLowerCase()]) ||
-      entry.letter;
-    if (phSpoken) phSpoken.textContent = `🔊 ${spoken}`;
+    if (phSpoken) phSpoken.textContent = `🔊 ${entry.letter}`;
     phPhrase.textContent = entry.phrase;
     phWord.textContent = entry.word;
     phonicsPanel.classList.remove("pop");
-    // reflow for animation
     void phonicsPanel.offsetWidth;
     phonicsPanel.classList.add("pop");
   }

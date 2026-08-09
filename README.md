@@ -62,7 +62,7 @@ git add -A && git commit -m "..." && git push
 - 按下字母播放英文读音，例如 **「A for apple」**
 - 26 个字母均已配置（apple / ball / cat … zebra）
 - **数字与其它键一律忽略**
-- 使用 **预录美式英语音频**（`audio/letters/*.m4a`），避免中文系统语音把 A/B 念错
+- 字母名使用 **真人录制音频**（`audio/letters/*.m4a`，来源见 `audio/letters/ATTRIBUTION.txt`），**不用 TTS**
 
 | 键 | 例句 |
 |----|------|

@@ -1,0 +1,5 @@
+Letter name audio (A–Z)
+Source: https://github.com/jona70x/Alphabet-with-sounds
+Author: jona70x (self-recorded human pronunciation)
+Files: sounds/A.m4a … sounds/Z.m4a → audio/letters/a.m4a … z.m4a
+Used as educational letter-name clips in this project with attribution.

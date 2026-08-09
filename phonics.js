@@ -168,44 +168,14 @@ window.PHONICS_BANK = {
  * - A → "ay" (ei), never bare "a" which some engines shorten
  * - Others: "bee", "see", "dee"… classic letter-name spellings
  */
-// Spoken letter-name shown on screen + used for audio file content
-// B = "bee" (not D). D = "dee". A = "ay" (ei).
+// Display label only — audio is real human letter-name clips in audio/letters/*.m4a
+// (not TTS spellings like "aitch"/"bee")
 window.LETTER_NAMES = {
-  a: "ay",
-  b: "bee",
-  c: "see",
-  d: "dee",
-  e: "ee",
-  f: "eff",
-  g: "jee",
-  h: "aitch",
-  i: "eye",
-  j: "jay",
-  k: "kay",
-  l: "ell",
-  m: "em",
-  n: "en",
-  o: "oh",
-  p: "pee",
-  q: "cue",
-  r: "ar",
-  s: "ess",
-  t: "tee",
-  u: "you",
-  v: "vee",
-  w: "double-u",
-  x: "ex",
-  y: "why",
-  z: "zee",
+  a: "A", b: "B", c: "C", d: "D", e: "E", f: "F", g: "G", h: "H",
+  i: "I", j: "J", k: "K", l: "L", m: "M", n: "N", o: "O", p: "P",
+  q: "Q", r: "R", s: "S", t: "T", u: "U", v: "V", w: "W", x: "X",
+  y: "Y", z: "Z",
 };
-
-// Legacy alias
-window.PHONICS_SOUNDS = Object.fromEntries(
-  Object.entries(window.LETTER_NAMES).map(([k, text]) => [
-    k,
-    { lang: "en-US", text, repeat: 2 },
-  ])
-);
 
 // Avoid showing the exact same word twice in a row for a letter
 const _lastWord = Object.create(null);
@@ -234,14 +204,11 @@ window.getPhonics = function getPhonics(ch) {
   _lastWord[key] = pick.word;
 
   const letter = key.toUpperCase();
-  const sound =
-    window.PHONICS_SOUNDS[key] || { lang: "en-US", text: "ay", repeat: 2 };
   return {
     letter,
     word: pick.word,
     emoji: pick.emoji,
     phrase: `${letter} for ${pick.word}`,
-    sound,
   };
 };
 
