@@ -160,16 +160,7 @@ window.PHONICS_BANK = {
   ],
 };
 
-/**
- * How to SPEAK each letter NAME for kids (A B C…, not short phonemes).
- * A must be English "ay/ei" (/eɪ/), NOT short "a" / Chinese「啊」.
- *
- * Spelling tricks force en-US TTS to say the letter name clearly & slowly:
- * - A → "ay" (ei), never bare "a" which some engines shorten
- * - Others: "bee", "see", "dee"… classic letter-name spellings
- */
-// Display label only — audio is real human letter-name clips in audio/letters/*.m4a
-// (not TTS spellings like "aitch"/"bee")
+// Display only. Letter audio: human-recorded clips in audio/letters/*.m4a
 window.LETTER_NAMES = {
   a: "A", b: "B", c: "C", d: "D", e: "E", f: "F", g: "G", h: "H",
   i: "I", j: "J", k: "K", l: "L", m: "M", n: "N", o: "O", p: "P",

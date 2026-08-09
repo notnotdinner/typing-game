@@ -529,7 +529,6 @@
         e.stopPropagation();
         if (state !== "phonics") return;
         const now = performance.now();
-        // longer debounce so full "bee" can finish starting
         if (lastPhTapCh === ch && now - lastPhTapAt < 700) return;
         lastPhTapAt = now;
         lastPhTapCh = ch;
